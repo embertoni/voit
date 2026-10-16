@@ -21,9 +21,14 @@ import com.voit.domain.TaskRepository
 import com.voit.domain.UuidGenerator
 import com.voit.voice.AudioSessionController
 import com.voit.voice.FakeAudioSessionController
+import com.voit.voice.FakeSpeakerVerifier
 import com.voit.voice.FakeSpeechRecognizerEngine
+import com.voit.voice.FakeWakeWordDetector
 import com.voit.voice.RecordingConfig
+import com.voit.voice.SpeakerVerifier
 import com.voit.voice.SpeechRecognizerEngine
+import com.voit.voice.WakeConfig
+import com.voit.voice.WakeWordDetector
 
 /**
  * A tiny MANUAL dependency-injection container.
@@ -85,4 +90,36 @@ class VoitContainer(context: Context) {
     fun newAudioSessionController(): AudioSessionController = FakeAudioSessionController()
 
     val recordingConfig: RecordingConfig = RecordingConfig()
+
+    // --- Phase 3 hands-free gate pieces ---------------------------------------------------
+    // Wake-word detection + speaker verification are wired here as DEFAULT-SAFE FAKES, the
+    // same way the Phase-2 recognizer/audio-session are fakes. There is NO real on-device
+    // wake-word or speaker-verification model bundled: the concrete model choice (Picovoice
+    // vs sherpa-onnx keyword spotting / speaker embedding, etc.) still awaits the Phase-0
+    // hardware benchmark (see docs/models.md), so nothing native is pulled in and the app
+    // builds/runs in an emulator without a model.
+    //
+    // The pure WakeWordController that consumes these is the Phase-3 analogue of the
+    // RecordingController: its single `onTriggered` hand-off seam is what a real always-on
+    // listening service would wire to RecordingController.startPushToTalk(), so a verified
+    // wake-word utterance replaces the manual push-to-talk tap. Because there is no live
+    // microphone/foreground service here (that is Phase 4), the gate is NOT started by the
+    // app at runtime yet; it is validated by the pure JVM unit tests. The fake detector is
+    // created NOT-detecting by default so that even if a gate were started against the fake
+    // audio session it would never spuriously trigger a capture.
+    //
+    // SpeakerVerifier is a privacy-safe GATE only: it returns a boolean + score and holds no
+    // biometric template. The `voice_profile_metadata` row (metadata only, user-deletable)
+    // remains the only speaker-related persistence; nothing audio-related is stored here.
+    fun newWakeWordDetector(): WakeWordDetector = FakeWakeWordDetector(shouldDetect = false)
+
+    fun newSpeakerVerifier(): SpeakerVerifier = FakeSpeakerVerifier(shouldVerify = true, score = 1.0)
+
+    /**
+     * Build the hands-free [WakeConfig] from the live privacy settings: speaker match is
+     * required only when the user has enabled speaker verification. Kept as a pure mapper so
+     * the policy ("gate on the enrolled speaker when the user opted in") lives in one place.
+     */
+    fun wakeConfig(speakerVerificationEnabled: Boolean): WakeConfig =
+        WakeConfig(requireSpeakerMatch = speakerVerificationEnabled)
 }
