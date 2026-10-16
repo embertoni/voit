@@ -23,8 +23,11 @@ android {
 
 dependencies {
     implementation(project(":core:domain"))
+    implementation(project(":core:voice"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit4)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
