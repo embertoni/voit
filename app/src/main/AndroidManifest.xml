@@ -4,11 +4,25 @@
     <!--
       Phase 2 voice capability. These declare the capability only; the RUNTIME request is
       staged by the pure VoicePermissionModel (platform:android) and is prompted ONLY when
-      the voice feature is enabled, with a staged rationale. No foreground-service or any
-      Phase-4 permission is declared.
+      the voice feature is enabled, with a staged rationale.
     -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      Phase 4 always-on-listening capability. CAPABILITY ONLY: no foreground service is
+      started and no overlay is drawn at runtime yet. The pure ForegroundMicServiceModel /
+      OverlayPermissionModel (platform:android) encode the start-eligibility + overlay-grant
+      rules and are exercised off-device; the live Service/WindowManager runtime is deferred
+      to a real device (there is none in this scaffolding pass).
+        - FOREGROUND_SERVICE / FOREGROUND_SERVICE_MICROPHONE: run the mic in a foreground
+          service (the microphone type + its dedicated permission are required on API 34+).
+        - SYSTEM_ALERT_WINDOW: draw Voit's OWN small listening-status overlay. This is NOT a
+          screen reader / accessibility service and never reads other apps' screens.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".VoitApplication"
