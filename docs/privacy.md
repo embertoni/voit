@@ -58,3 +58,17 @@ Voit is privacy-first and local-first. Core principles:
   feature is enabled, with a staged rationale (rationale shown before the system prompt;
   `POST_NOTIFICATIONS` gated to API 33+). No foreground-service or Phase-4 permission is
   declared in Phase 2.
+  - **ACTIVE now:** the pure decision model (`VoicePermissionModel`) and its thin Android
+    adapter (`VoicePermissionRequester`) are implemented and unit-tested, and the Voice
+    screen's "Start recording" action is wired through them in the app (`MainActivity`'s
+    `VoicePermissionGate` registers an `ActivityResultLauncher` and consults the model
+    before capture begins, with the live `listeningEnabled` setting as the feature flag).
+    All decision branching lives in the pure model.
+  - **DEFERRED to a real device:** the LIVE runtime grant round-trip (the system
+    permission dialog, the OS `shouldShowRequestPermissionRationale` flag, and gating
+    capture on an actual grant) is only exercised on real hardware, which does not exist in
+    this sandbox. The default wired capture is a fake audio session that needs no
+    microphone grant, so the gate proceeds gracefully when a live grant cannot complete.
+    The on-device behavior is therefore NOT validated here; the wiring is validated by
+    inspection plus the pure-model JVM tests. When a real capture source lands, the gate is
+    the single place that must gate capture on an actual grant.

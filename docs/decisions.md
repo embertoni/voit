@@ -234,6 +234,45 @@ Phase 1 wired the typed Simulator path. No real audio or model runs here.
   discarded immediately after recognition; nothing audio/transcript-related is added to
   `action_runs` or any DB table, and the DB schema is unchanged in Phase 2.
 
+### Phase 2 post-review hardening (review-driven, NEEDS_CHANGES -> addressed)
+
+A semantic review of Phase 2 returned NEEDS_CHANGES with four confirmed findings. All four
+are addressed here; scope is unchanged (default recognizer stays the fake, no model/native
+dependency, no DB/schema change, no sandbox path committed).
+
+- **Permission model wired into the app (was dead code at runtime).** The pure
+  `VoicePermissionModel` / `VoicePermissionRequester` were built and unit-tested but never
+  invoked, so the Voice screen started capture with no runtime permission check. A new
+  Activity-side `VoicePermissionGate` (in `app`) registers an `ActivityResultLauncher` and
+  routes the Voice screen's "Start recording" action through the pure model
+  (`requester.nextStep(...)`), with the live `listeningEnabled` setting as the feature
+  flag; `MainActivity` builds the gate and hands `VoitApp` -> `PushToTalkScreen` an
+  `onStartRecording` hook. ALL decision branching stays inside `VoicePermissionModel`. The
+  LIVE grant round-trip needs a real device (none here), so the gate proceeds gracefully
+  against the default fake session; the wiring is validated by inspection + the existing
+  pure-model JVM tests, and NO device behavior is claimed validated. `docs/privacy.md` now
+  states precisely what is ACTIVE vs DEFERRED. `app` gains a dependency on `:platform:android`.
+- **`CancellationException` no longer swallowed (real bug).** `recognizeTransient` caught
+  `Throwable`, turning a coroutine cancellation into a `null` "recognizer failure" result;
+  a `cancel()` firing mid-recognition could then publish a `Review` state AFTER `cancel()`
+  had already returned to `Idle`, racing cancel's clean-idle contract. It now catches and
+  rethrows `CancellationException` before the generic `Throwable -> null` mapping. Pinned by
+  `RecordingStateMachineTest.cancel during the transcribing window returns cleanly to idle
+  and publishes no review`, which blocks a recognizer mid-flight, cancels, and asserts the
+  final state is `Idle` with no `Review`.
+- **Empty-buffer marker at the recognize call site.** `recognizeInto` -> `recognizeTransient`
+  passes `ByteArray(0)` to `recognize`; the default `FakeSpeechRecognizerEngine` ignores
+  its input so this is fine today, but a real engine would get no audio. A clear
+  `TODO(phase-0 real capture)` now marks the `ByteArray(0)` site explaining that a real
+  capture source must supply the actual captured buffer here, kept transient (never stored
+  or persisted) to preserve the privacy invariant.
+- **`acceptReview` trim/return behavior documented.** The `PushToTalkViewModel.acceptReview`
+  KDoc now states that a whitespace-only (blank-after-`trim`) edit intentionally does
+  nothing (no empty note is ever persisted, manual entry stays required) and that the
+  controller's returned value is deliberately ignored (the ViewModel owns the trimmed text
+  it routes into `TranscriptProcessor`; only the controller's Review -> Idle transition
+  matters). No behavior change.
+
 ### FEAT-004 (design system + Phase-1 UI, DI, navigation, end-to-end simulator)
 
 - **Monochrome design system (`core:design`).** The palette is strictly black / white /

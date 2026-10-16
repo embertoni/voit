@@ -1,6 +1,7 @@
 package com.voit.voice
 
 import com.voit.domain.FixedClock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -16,9 +17,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Pins the five Phase-2 recording behaviors on the pure [RecordingController]: happy path,
- * timeout -> bounded + recoverable, cancel -> clean idle, recognizer failure/empty ->
- * fallback editable review, and the privacy buffer-not-retained invariant. Driven entirely
+ * Pins the Phase-2 recording behaviors on the pure [RecordingController]: happy path,
+ * timeout -> bounded + recoverable, cancel from recording -> clean idle, cancel DURING the
+ * transcribing window -> clean idle with no Review published (CancellationException is
+ * rethrown, not swallowed), recognizer failure/empty -> fallback editable review, and the
+ * privacy buffer-not-retained invariant. Driven entirely
  * by the fakes + an injected clock + a TestScope/StandardTestDispatcher (virtual time),
  * mirroring the Phase-1 ViewModel test style. No Android, no network, no model.
  */
@@ -128,6 +131,47 @@ class RecordingStateMachineTest {
         assertEquals(RecordingState.Idle, controller.state.value)
         assertEquals(AudioSessionState.STOPPED, session.state)
         assertEquals(0, recognizer.calls)
+    }
+
+    @Test
+    fun `cancel during the transcribing window returns cleanly to idle and publishes no review`() = runTest {
+        val scope = TestScope(StandardTestDispatcher(testScheduler))
+        val session = FakeAudioSessionController()
+        // A recognizer that BLOCKS inside recognize() until released, so we can cancel while
+        // recognition is in flight (the Transcribing window) - the race the review flagged.
+        val gate = CompletableDeferred<Unit>()
+        val recognizer = object : SpeechRecognizerEngine {
+            var calls: Int = 0
+                private set
+
+            override suspend fun recognize(audioFrame: ByteArray): RecognitionResult {
+                calls++
+                gate.await() // suspend here until the test releases (it never will: we cancel)
+                return RecognitionResult("too late", isFinal = true, language = "en")
+            }
+        }
+        val controller = newController(session, recognizer, scope)
+
+        controller.startPushToTalk()
+        scope.runCurrent()
+        assertTrue(controller.state.value is RecordingState.Recording)
+
+        // Stop to enter recognition, then let the controller reach the suspended recognize().
+        controller.stopAndTranscribe()
+        scope.runCurrent()
+        assertEquals(RecordingState.Transcribing, controller.state.value)
+        assertEquals(1, recognizer.calls)
+
+        // Cancel WHILE recognition is still suspended mid-flight.
+        controller.cancel()
+        scope.advanceUntilIdle()
+
+        // Clean cancel: final state is Idle, the session is stopped, and NO Review was
+        // published despite recognition being in flight (CancellationException is rethrown,
+        // not swallowed into a null -> Review).
+        assertEquals(RecordingState.Idle, controller.state.value)
+        assertEquals(AudioSessionState.STOPPED, session.state)
+        assertFalse(controller.state.value is RecordingState.Review)
     }
 
     @Test

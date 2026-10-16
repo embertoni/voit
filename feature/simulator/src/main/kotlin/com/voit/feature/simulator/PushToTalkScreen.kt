@@ -42,10 +42,17 @@ import com.voit.voice.RecordingState
  *
  * Strictly monochrome; state is conveyed by text labels, never by colour alone.
  */
+/**
+ * @param onStartRecording invoked when the user presses "Start recording". The app wires
+ *   this to route through the runtime voice-permission flow (the pure
+ *   `VoicePermissionModel`) BEFORE capture begins; it defaults to calling
+ *   [PushToTalkViewModel.startRecording] directly so previews and tests work unchanged.
+ */
 @Composable
 fun PushToTalkScreen(
     viewModel: PushToTalkViewModel,
     modifier: Modifier = Modifier,
+    onStartRecording: () -> Unit = viewModel::startRecording,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val spacing = VoitTheme.spacing
@@ -85,7 +92,7 @@ fun PushToTalkScreen(
             // affordance accessible (press-and-hold alone is hard for TalkBack).
             VoitButton(
                 text = if (isRecording) "Recording... (tap Stop)" else "Start recording",
-                onClick = viewModel::startRecording,
+                onClick = onStartRecording,
                 enabled = !isRecording && !isTranscribing,
                 modifier = Modifier.fillMaxWidth(),
                 contentDescription = "Start push-to-talk recording",

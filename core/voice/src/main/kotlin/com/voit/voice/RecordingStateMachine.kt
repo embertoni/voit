@@ -1,6 +1,7 @@
 package com.voit.voice
 
 import com.voit.domain.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -273,7 +274,23 @@ class RecordingController(
      */
     private suspend fun recognizeTransient(): RecognitionResult? =
         try {
+            // TODO(phase-0 real capture): the empty ByteArray(0) below is a PLACEHOLDER
+            //  buffer. The default engine is FakeSpeechRecognizerEngine, which ignores its
+            //  input and returns a canned transcript, so no real audio flows here yet. When
+            //  a REAL capture source (microphone / on-device recognizer) is wired in behind
+            //  AudioSessionController, the ACTUAL captured audio buffer MUST be supplied here
+            //  instead of ByteArray(0) - otherwise a real recognizer would receive no audio
+            //  (a silent no-audio bug). The buffer must stay a TRANSIENT local (never stored
+            //  on this controller, never placed on a RecordingState, never persisted) to
+            //  keep the raw-audio-not-retained privacy invariant intact.
             withContext(dispatcher) { speechRecognizer.recognize(ByteArray(0)) }
+        } catch (c: CancellationException) {
+            // A coroutine cancellation (e.g. cancel() firing mid-recognition) must NOT be
+            // swallowed into a null "recognizer failure" result: doing so would let a
+            // cancelled run publish a Review state after cancel() already returned to Idle,
+            // racing cancel()'s clean-idle contract. Rethrow so the capture job unwinds and
+            // the Idle state cancel() set stands.
+            throw c
         } catch (t: Throwable) {
             null
         }

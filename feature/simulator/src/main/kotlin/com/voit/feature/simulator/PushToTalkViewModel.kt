@@ -153,12 +153,24 @@ class PushToTalkViewModel(
 
     /**
      * Accept the (possibly edited) review transcript: hand it to the EXISTING
-     * [TranscriptProcessor] with [NoteSource.VOICE] and persist the result. A blank
-     * transcript does nothing but reports a message (manual entry is still required).
+     * [TranscriptProcessor] with [NoteSource.VOICE] and persist the result.
+     *
+     * Behavior for a whitespace-only (blank-after-[String.trim]) edit is INTENTIONAL: it
+     * leaves review and shows a "type something first" message but creates NOTHING. We never
+     * persist an empty/whitespace note or run the processor on blank input, so manual entry
+     * stays required - the fallback path is never allowed to silently create an empty note.
+     *
+     * The controller's [RecordingController.acceptReview] return value is DELIBERATELY
+     * ignored here: that method hands back the text the controller would carry onward, but
+     * this ViewModel is the authority on what text to process (we already trimmed [edited]
+     * and route exactly that into [TranscriptProcessor]). We still call it so the controller
+     * leaves its Review state and returns to Idle; only its state transition matters to us,
+     * not its returned string.
      */
     fun acceptReview() {
         val edited = _uiState.value.transcript.trim()
         // Clear the controller's review state regardless; we carry the edited text onward.
+        // (Return value ignored on purpose - see KDoc: this VM owns the text to process.)
         controller.acceptReview(edited)
         if (edited.isEmpty()) {
             _uiState.value = _uiState.value.copy(

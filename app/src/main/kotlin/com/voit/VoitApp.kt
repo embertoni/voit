@@ -58,8 +58,17 @@ private const val COMMAND_EDITOR_ROUTE = "command_editor"
  * Simulator as the home destination (it is the demonstrable Phase-1 exit path). ViewModels
  * are built by [factory] from the manual DI container.
  */
+/**
+ * @param onStartVoiceCapture Activity-side hook invoked when the user presses "Start
+ *   recording" on the Voice screen. It routes through the runtime permission flow (the pure
+ *   `VoicePermissionModel`) and then runs the supplied callback to actually begin capture.
+ *   Defaults to invoking the callback directly so previews / non-Activity hosts still work.
+ */
 @Composable
-fun VoitApp(factory: VoitViewModelFactory) {
+fun VoitApp(
+    factory: VoitViewModelFactory,
+    onStartVoiceCapture: (onProceed: () -> Unit) -> Unit = { it() },
+) {
     val navController = rememberNavController()
     val destinations = VoitDestination.entries
 
@@ -101,7 +110,12 @@ fun VoitApp(factory: VoitViewModelFactory) {
             }
             composable(VoitDestination.Voice.route) {
                 val vm: PushToTalkViewModel = viewModel(factory = factory)
-                PushToTalkScreen(viewModel = vm)
+                PushToTalkScreen(
+                    viewModel = vm,
+                    // Gate start-capture through the runtime permission flow (pure
+                    // VoicePermissionModel) before the ViewModel begins recording.
+                    onStartRecording = { onStartVoiceCapture { vm.startRecording() } },
+                )
             }
             composable(VoitDestination.Notes.route) {
                 val vm: NotesViewModel = viewModel(factory = factory)
