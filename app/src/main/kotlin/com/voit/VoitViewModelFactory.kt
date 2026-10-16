@@ -6,6 +6,7 @@ import com.voit.feature.commands.CommandsViewModel
 import com.voit.feature.notes.NoteEditorViewModel
 import com.voit.feature.notes.NotesViewModel
 import com.voit.feature.settings.SettingsViewModel
+import com.voit.feature.simulator.PushToTalkViewModel
 import com.voit.feature.simulator.SimulatorViewModel
 import com.voit.feature.tasks.TasksViewModel
 
@@ -23,6 +24,17 @@ class VoitViewModelFactory(private val container: VoitContainer) : ViewModelProv
                 processor = container.transcriptProcessor,
                 noteRepository = container.noteRepository,
                 taskRepository = container.taskRepository,
+            ) as T
+
+        modelClass.isAssignableFrom(PushToTalkViewModel::class.java) ->
+            PushToTalkViewModel(
+                processor = container.transcriptProcessor,
+                noteRepository = container.noteRepository,
+                taskRepository = container.taskRepository,
+                audioSessionController = container.newAudioSessionController(),
+                speechRecognizer = container.speechRecognizer,
+                recordingConfig = container.recordingConfig,
+                clock = com.voit.domain.SystemClock,
             ) as T
 
         modelClass.isAssignableFrom(NotesViewModel::class.java) ->

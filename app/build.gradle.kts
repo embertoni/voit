@@ -51,6 +51,8 @@ dependencies {
     implementation(project(":feature:commands"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:simulator"))
+    implementation(project(":core:voice"))
+    implementation(project(":platform:android"))
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.datastore.preferences)

@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      Phase 2 voice capability. These declare the capability only; the RUNTIME request is
+      staged by the pure VoicePermissionModel (platform:android) and is prompted ONLY when
+      the voice feature is enabled, with a staged rationale. No foreground-service or any
+      Phase-4 permission is declared.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".VoitApplication"
         android:allowBackup="true"

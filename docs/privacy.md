@@ -38,3 +38,37 @@ Voit is privacy-first and local-first. Core principles:
   passwords. A real user-supplied-password -> KDF -> authenticated-encryption (AEAD) flow
   is planned for a later phase and will replace the no-op implementation without changing
   the backup content model.
+
+## Phase 2 invariants (local recording & ASR scaffolding)
+
+- **Raw audio is NOT retained.** The push-to-talk `RecordingController` (`core:voice`)
+  hands the capture buffer to recognition as a transient local that is dereferenced
+  immediately after the recognize call. It is never assigned to a field, never placed on a
+  `RecordingState`, and never persisted. Nothing audio- or transcript-related is added to
+  `action_runs` or to any other DB table, and the Room schema is unchanged in Phase 2.
+- **No network / no cloud in the core path.** Recording, recognition (via the fake default
+  or, when swapped in, the device's own on-device recognizer), interpretation, and
+  note/task creation all run on-device with no network calls.
+- **Diagnostics remain codes, not content.** The recording state machine surfaces only
+  stable `RecordingErrorCode` strings (TIMEOUT / RECOGNIZER_FAILURE / EMPTY_TRANSCRIPT /
+  CANCELLED); it never records the captured transcript or audio in diagnostics.
+- **Permissions requested only when the voice feature is enabled.** `RECORD_AUDIO` and
+  `POST_NOTIFICATIONS` are declared in the manifest as capabilities, but the runtime
+  request is staged by the pure `VoicePermissionModel` and is prompted only when the voice
+  feature is enabled, with a staged rationale (rationale shown before the system prompt;
+  `POST_NOTIFICATIONS` gated to API 33+). No foreground-service or Phase-4 permission is
+  declared in Phase 2.
+  - **ACTIVE now:** the pure decision model (`VoicePermissionModel`) and its thin Android
+    adapter (`VoicePermissionRequester`) are implemented and unit-tested, and the Voice
+    screen's "Start recording" action is wired through them in the app (`MainActivity`'s
+    `VoicePermissionGate` registers an `ActivityResultLauncher` and consults the model
+    before capture begins, with the live `listeningEnabled` setting as the feature flag).
+    All decision branching lives in the pure model.
+  - **DEFERRED to a real device:** the LIVE runtime grant round-trip (the system
+    permission dialog, the OS `shouldShowRequestPermissionRationale` flag, and gating
+    capture on an actual grant) is only exercised on real hardware, which does not exist in
+    this sandbox. The default wired capture is a fake audio session that needs no
+    microphone grant, so the gate proceeds gracefully when a live grant cannot complete.
+    The on-device behavior is therefore NOT validated here; the wiring is validated by
+    inspection plus the pure-model JVM tests. When a real capture source lands, the gate is
+    the single place that must gate capture on an actual grant.

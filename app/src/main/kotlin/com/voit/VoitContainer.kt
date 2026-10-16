@@ -19,6 +19,11 @@ import com.voit.domain.SettingsRepository
 import com.voit.domain.SystemClock
 import com.voit.domain.TaskRepository
 import com.voit.domain.UuidGenerator
+import com.voit.voice.AudioSessionController
+import com.voit.voice.FakeAudioSessionController
+import com.voit.voice.FakeSpeechRecognizerEngine
+import com.voit.voice.RecordingConfig
+import com.voit.voice.SpeechRecognizerEngine
 
 /**
  * A tiny MANUAL dependency-injection container.
@@ -57,4 +62,27 @@ class VoitContainer(context: Context) {
         clock = SystemClock,
         ids = UuidGenerator,
     )
+
+    // --- Phase 2 voice pieces -------------------------------------------------------------
+    // The DEFAULT recognizer wired here is a FAKE PLACEHOLDER. There is no real on-device
+    // ASR/VAD model or microphone capture wired yet: that awaits the Phase-0 hardware
+    // benchmark (model selection - sherpa-onnx vs whisper.cpp etc - is still pending), so no
+    // model/native dependency is bundled and the app runs in an emulator without a model.
+    //
+    // platform:android's AndroidOnDeviceSpeechRecognizer (the framework on-device
+    // SpeechRecognizer adapter) is available to SWAP IN behind the SpeechRecognizerEngine
+    // interface, but it is UNVALIDATED off-device and is intentionally NOT the default.
+    //
+    // The FakeAudioSessionController stands in for real audio capture the same way the
+    // Phase-1 Simulator stood in for the microphone. The RecordingController that consumes
+    // these is built INSIDE the PushToTalkViewModel from these engines + config so it can
+    // run on the ViewModel's scope (viewModelScope / an injected test scope).
+    val speechRecognizer: SpeechRecognizerEngine = FakeSpeechRecognizerEngine(
+        cannedTranscript = "title: Voice note bullet point captured by push to talk tag voice",
+    )
+
+    /** Fresh audio session per capture ViewModel; the fake only tracks state transitions. */
+    fun newAudioSessionController(): AudioSessionController = FakeAudioSessionController()
+
+    val recordingConfig: RecordingConfig = RecordingConfig()
 }
