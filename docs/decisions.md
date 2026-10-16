@@ -451,3 +451,64 @@ wake-word model, or speaker-verification model runs here.
   `WakeWordStateMachineTest` cases) and `./gradlew :app:compileDebugKotlin` succeeds with
   the Phase-3 container wiring. The 11 `:core:data` Robolectric tests remain a device-less-CI
   gotcha only (they pass on a normal machine); no sandbox path was re-introduced.
+
+### Phase 4 (foreground mic service + global overlay scaffolding)
+
+Phase 4 adds the always-on-listening infrastructure **as pure decision logic behind the
+Android boundaries**, exactly mirroring how Phase 2's `VoicePermissionModel` encoded the
+permission flow off-device. No live foreground service, notification, or overlay runs here.
+
+**What was BUILT (all in `platform:android`, pure + JVM-unit-tested):**
+
+- **`ForegroundMicServiceModel`** — a pure policy + lifecycle state machine for the
+  microphone foreground service. `evaluateStart(MicServiceConditions)` encodes the
+  start-eligibility rules with every Android value (SDK_INT + grants) as a plain input:
+  hard-refuses when listening is disabled, when `RECORD_AUDIO` is not granted, or (API 34+)
+  when `FOREGROUND_SERVICE_MICROPHONE` is missing; otherwise allows the start with the
+  `microphone` service type, flagging `notificationVisible = false` as a SOFT gap when
+  POST_NOTIFICATIONS is missing on API 33+ (Android still lets the service run; the ongoing
+  notification is just hidden). `requiresServiceType(sdkInt)` gates the API-29+ type
+  declaration, and `nextState(current, transition)` is an idempotent STOPPED -> STARTING ->
+  RUNNING -> STOPPING -> STOPPED lifecycle that refuses illegal/duplicate transitions.
+  Diagnostics are codes only (`MicServiceErrorCode`).
+- **`OverlayPermissionModel`** — the Phase-4 analogue of `VoicePermissionModel` for the
+  `SYSTEM_ALERT_WINDOW` grant. Because an overlay cannot be requested with a system dialog,
+  the flow is grant? proceed : (staged in-app explanation -> open the
+  `ACTION_MANAGE_OVERLAY_PERMISSION` settings screen). Feature-disabled does nothing;
+  below API 23 the grant is implicit. `canDrawOverlays` + SDK_INT + a
+  `rationaleAcknowledged` flag are plain inputs, so the staged-explanation-before-settings
+  ordering is unit-pinned.
+- **Manifest capability (app).** `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`, and
+  `SYSTEM_ALERT_WINDOW` are declared as CAPABILITY ONLY, the same way Phase 2 declared
+  RECORD_AUDIO/POST_NOTIFICATIONS without starting anything. The APK still assembles.
+
+**Design choices:**
+
+- **Models, not a live `Service`/`WindowManager`.** Android 14 throws at runtime for a
+  mis-declared foreground-service type / missing `FOREGROUND_SERVICE_MICROPHONE`; encoding
+  those rules as pure logic lets us pin them with ordinary tests instead of only
+  discovering them on a device. The thin Android service shell + overlay view (added when a
+  real device is available) will delegate every start/stop/type/overlay-grant decision to
+  these models, keeping them the single source of lifecycle/grant truth.
+- **The overlay is Voit's OWN status affordance.** It is explicitly NOT a screen reader and
+  NOT an accessibility service; it never reads other apps' screen contents (re-affirming
+  docs/privacy.md "No screen scraping"). The model governs only whether Voit may draw its
+  own overlay.
+
+**What was DEFERRED and WHY:**
+
+- The **live foreground service, the ongoing notification, and the actual overlay window**
+  need a real device/emulator with the runtime permissions actually granted (none here), so
+  they are **not wired into the app at runtime yet** and are NOT claimed as validated. The
+  always-on `WakeWordController` from Phase 3 is the consumer that a real mic service would
+  host; connecting the gate's `onTriggered` seam to `RecordingController.startPushToTalk()`
+  inside that service is the on-device integration step.
+- **Privacy invariant (unchanged, re-affirmed):** these models govern LIFECYCLE and GRANTS
+  only; they never touch audio. The raw-audio-not-retained invariant stays enforced in
+  `core:voice`, and nothing audio-related is persisted. Diagnostics remain codes only.
+
+- Verified on a real dev machine (JDK 17 via the Gradle-provisioned Adoptium 17 toolchain):
+  `./gradlew :platform:android:test` passes (13 `ForegroundMicServiceModelTest` + 7
+  `OverlayPermissionModelTest` added, alongside the existing permission/ASR tests), the full
+  `./gradlew test` suite passes, and `./gradlew :app:assembleDebug` builds the APK with the
+  Phase-4 manifest capabilities merged. No sandbox path was re-introduced.

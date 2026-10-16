@@ -97,3 +97,28 @@ Voit is privacy-first and local-first. Core principles:
   continuous capture and the mic foreground service are Phase 4. Phase 3 adds only the pure,
   unit-tested decision logic behind the existing detector/verifier interfaces, validated
   off-device.
+
+## Phase 4 invariants (foreground mic service & overlay scaffolding)
+
+- **The overlay is Voit's OWN affordance, not screen scraping.** The `SYSTEM_ALERT_WINDOW`
+  capability is for Voit to draw its own small listening-status overlay. Voit does NOT use
+  an accessibility service and does NOT read other apps' screen contents; the
+  `OverlayPermissionModel` governs only whether Voit may draw its own overlay (re-affirming
+  the "No screen scraping" principle above).
+- **Foreground-service models touch lifecycle only, never audio.** `ForegroundMicServiceModel`
+  decides WHEN the mic service may legally start and its STATE transitions; it never handles
+  an audio buffer. The raw-audio-not-retained invariant stays enforced in `core:voice`
+  (`RecordingController` / `WakeWordController`), and nothing audio-related is persisted.
+- **Listening still requires explicit opt-in + granted permissions.** A mic foreground
+  service start is hard-refused unless the user enabled listening AND `RECORD_AUDIO` is
+  granted (plus `FOREGROUND_SERVICE_MICROPHONE` on API 34+). An ongoing notification is
+  shown whenever POST_NOTIFICATIONS allows it, so the user always has a visible, dismissible
+  indication that the mic service is running.
+- **Diagnostics remain codes, not content.** A refused start surfaces only a stable
+  `MicServiceErrorCode` (FEATURE_DISABLED / RECORD_AUDIO_NOT_GRANTED /
+  FGS_MIC_PERMISSION_MISSING / POST_NOTIFICATIONS_NOT_GRANTED); no captured audio is ever
+  recorded in diagnostics.
+- **Still no always-on listening at runtime.** The live foreground service, notification,
+  and overlay window are deferred to a real device. Phase 4 adds only the pure, unit-tested
+  policy/lifecycle/grant logic behind the Android boundaries, validated off-device; the
+  manifest declares the capabilities but nothing is started.
