@@ -109,3 +109,27 @@ internal fun CommandDefinitionEntity.toDomain(): CommandDefinition =
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
+
+// --- ActionRun (redacted audit trail) ------------------------------------------------------
+
+internal fun com.voit.domain.ActionRun.toEntity(): ActionRunEntity =
+    ActionRunEntity(
+        id = id,
+        commandId = commandId,
+        startedAt = startedAt,
+        endedAt = endedAt,
+        status = status,
+        resultCode = resultCode,
+        errorCode = errorCode,
+    )
+
+internal fun ActionRunEntity.toDomain(): com.voit.domain.ActionRun =
+    com.voit.domain.ActionRun(
+        id = id,
+        commandId = commandId,
+        startedAt = startedAt,
+        endedAt = endedAt,
+        status = status,
+        resultCode = resultCode,
+        errorCode = errorCode,
+    )

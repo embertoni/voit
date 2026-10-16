@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,6 +51,13 @@ fun CommandsScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            state.runMessage?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(spacing.md),
+                )
+            }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 if (state.commands.isEmpty()) {
                     item {
@@ -65,11 +74,21 @@ fun CommandsScreen(
                         supporting = "Intent: ${command.intent} · ${command.actions.size} action(s)",
                         overline = if (!command.enabled) "DISABLED" else null,
                         trailing = {
-                            VoitIconButton(
-                                icon = Icons.Filled.Delete,
-                                contentDescription = "Delete command ${command.name}",
-                                onClick = { viewModel.deleteCommand(command.id) },
-                            )
+                            Row {
+                                // Run is offered only for an enabled command.
+                                if (command.enabled) {
+                                    VoitIconButton(
+                                        icon = Icons.Filled.PlayArrow,
+                                        contentDescription = "Run command ${command.name}",
+                                        onClick = { viewModel.runCommand(command) },
+                                    )
+                                }
+                                VoitIconButton(
+                                    icon = Icons.Filled.Delete,
+                                    contentDescription = "Delete command ${command.name}",
+                                    onClick = { viewModel.deleteCommand(command.id) },
+                                )
+                            }
                         },
                         onClick = {
                             viewModel.editExisting(command)

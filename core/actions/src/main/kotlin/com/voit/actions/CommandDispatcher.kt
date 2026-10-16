@@ -136,18 +136,20 @@ class CommandDispatcher(
 
     /**
      * True when [needle] appears in [haystack] on whole-word boundaries (both already
-     * normalized/lowercased). A boundary is the string edge or a space, so an incidental
-     * fragment inside a longer word does not match - mirroring the IntentParser's
-     * whole-word substring discipline recorded in docs/decisions.md.
+     * normalized/lowercased). A boundary is the string edge or any non-alphanumeric
+     * character (space, punctuation), so "take a note." matches the phrase "note" but
+     * "notebook" does not - an incidental fragment inside a longer word never matches.
+     * This mirrors the IntentParser's whole-word substring discipline (docs/decisions.md)
+     * while tolerating the punctuation a transcript naturally carries.
      */
     private fun containsWholeWord(haystack: String, needle: String): Boolean {
         var from = 0
         while (true) {
             val idx = haystack.indexOf(needle, from)
             if (idx < 0) return false
-            val beforeOk = idx == 0 || haystack[idx - 1] == ' '
+            val beforeOk = idx == 0 || !haystack[idx - 1].isLetterOrDigit()
             val end = idx + needle.length
-            val afterOk = end == haystack.length || haystack[end] == ' '
+            val afterOk = end == haystack.length || !haystack[end].isLetterOrDigit()
             if (beforeOk && afterOk) return true
             from = idx + 1
         }

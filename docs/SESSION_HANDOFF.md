@@ -170,16 +170,23 @@ DB table; diagnostics are stable codes only; no cloud/network in the core path.
 ## 7. Immediate next steps (pick up here)
 
 1. **Merge the Phase-5 PR** (`feat/phase-5-commands-workflow` → `main`) if not already done.
-2. **Finish wiring Phase 5 end-to-end** — these are device-INDEPENDENT and the natural next
-   increments (all called out in `docs/decisions.md` Phase-5 "DEFERRED"):
-   - **Per-action argument capture in the command editor** (today the editor models actions
-     as `List<ActionType>`, so saved `ActionRequest`s have empty args and `argumentSchema`
-     stays default-empty). Add an enable/disable toggle too (`enabled` is hard-coded true).
-   - **Give `DefaultHandlers` real effects** — they are all `EchoActionHandler` placeholders;
-     wire them to the repositories/platform services so a dispatched workflow actually
-     mutates notes/tasks.
-   - **Audit `ActionRunEntity`** — map a `WorkflowOutcome` to redacted status/result/error
-     CODES (no content) and persist via the existing `ActionRunDao` (nothing writes it yet).
+2. **Finish wiring Phase 5 end-to-end** — remaining device-INDEPENDENT increment:
+   - ✅ **DONE (Phase-5 follow-up):** `DefaultHandlers` now has real repository-backed
+     note/task handlers via `DefaultHandlers.withRepositories(...)` (wired in
+     `VoitContainer`), so a dispatched command actually mutates notes/tasks. A redacted
+     audit trail (`ActionRun` / `ActionRunRepository` / `RoomActionRunRepository` /
+     `ActionRunRecorder`) maps a `WorkflowOutcome`/`CommandDispatchResult` to a code-only
+     `action_runs` record (codes + ids, never content).
+   - ✅ **DONE (Phase-5 completion):** The command editor now captures PER-ACTION arguments
+     (a text field per declared `ParamSpec`, parsed to the typed `ParamValue` at save) and an
+     enable/disable toggle; a stored command can be RUN from the list, which invokes
+     `commandDispatcher.dispatch` + `actionRunRecorder.record` (wired via
+     `VoitViewModelFactory`). The "wired in DI but never invoked from a screen" gap is closed.
+   - Non-persistence handlers (timers, overlay, listening, open-app, speak, export) remain
+     echo placeholders — they need platform runtime from later phases.
+   - **Phase 5 is now functionally complete** off-device: author a command from the
+     allow-list (with typed args) → it persists → Run dispatches it through the bounded
+     engine → real note/task effects land → a redacted `action_runs` record is written.
 3. **Phase 6** (optional local LLM + polish) and **Phase 7** (release hardening) remain,
    per the plan. The real on-device model selection still awaits the **Phase-0 benchmark**
    on a physical Android phone.
