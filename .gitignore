@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+*/build/
+**/build/
+
+# Room exported schemas are intentionally committed (migration baseline). Do NOT ignore.
+!**/schemas/
+!**/schemas/**
+
+# Android / local config
+local.properties
+*.apk
+.cxx/
+captures/
+
+# Kotlin compiler / daemon working dir
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
