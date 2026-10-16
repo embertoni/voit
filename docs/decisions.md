@@ -384,3 +384,70 @@ ML/model deps, no cloud, no real mic/overlay/FGS runtime).
   (8) words and `MAX_FALLBACK_TITLE_CHARS` (60) characters, with an ellipsis marking
   truncation. Pinned by `TranscriptProcessorTest.create-task fallback title is capped and
   not the entire transcript`.
+
+### Phase 3 (wake word + speaker verification scaffolding)
+
+Phase 3 adds the hands-free trigger path **behind fakes**, exactly mirroring how Phase 2
+wired the push-to-talk path and how Phase 1 wired the typed Simulator path. No real audio,
+wake-word model, or speaker-verification model runs here.
+
+**What was BUILT:**
+
+- **Pure wake-word + speaker-verification gate state machine (`core:voice`).**
+  `WakeWordController` + `WakeState` (Idle / Listening / Detected / Verifying / Triggered /
+  Rejected) + `WakeConfig` (`requireSpeakerMatch`, `minSpeakerScore`) + `WakeErrorCode`
+  (SPEAKER_MISMATCH / VERIFIER_FAILURE / DETECTOR_FAILURE, codes only) drive the EXISTING
+  `WakeWordDetector` + `SpeakerVerifier` interfaces through the always-listening trigger
+  lifecycle (idle -> listening -> detected -> verifying -> {triggered | rejected -> rearm})
+  over an injected `AudioFrameSource`. On an accepted trigger it invokes a single
+  `onTriggered` hand-off seam. This is the **Phase-3 analogue of the Phase-2
+  `RecordingController`**: a pure, device-independent, fully unit-tested state holder with
+  no Android, no network, and no model. It uses the same patterns as the recorder: injected
+  `Clock` + scope + dispatcher, a `StateFlow<WakeState>`, codes-only diagnostics, and
+  `CancellationException` rethrown (never swallowed) so a `stop()`/scope-cancel mid-scan
+  unwinds cleanly with no late state published.
+- **Hand-off seam, not a recorder.** The gate OWNS no recording: `onTriggered` is the one
+  place a real always-on listening service would call
+  `RecordingController.startPushToTalk()`, so a verified wake-word utterance replaces the
+  manual push-to-talk tap. Keeping recording out of the gate preserves the single
+  responsibility and lets the two state machines be tested in isolation.
+- **DI defaults are FAKES (`VoitContainer`).** `newWakeWordDetector()` returns a
+  `FakeWakeWordDetector(shouldDetect = false)` (so even if a gate were started against the
+  fake audio session it would never spuriously trigger a capture) and `newSpeakerVerifier()`
+  returns a `FakeSpeakerVerifier`. A pure `wakeConfig(speakerVerificationEnabled)` mapper
+  derives `WakeConfig.requireSpeakerMatch` from the existing `AppSettings
+  .speakerVerificationEnabled` flag, so the "gate on the enrolled speaker only when the user
+  opted in" policy lives in one place. No new settings field was needed - `listeningEnabled`,
+  `wakePhrase`, `speakerVerificationEnabled`, and `wakeWordModelId` already exist from
+  FEAT-003/FEAT-004.
+- **Config threshold only ever TIGHTENS the verifier.** An accepted speaker must clear BOTH
+  the verifier's own `verified` boolean AND `WakeConfig.minSpeakerScore`; the threshold can
+  only reject a borderline true, never authorize a false. This mirrors the Phase-1 rule that
+  match confidence can gate down but never authorize up.
+
+**What was DEFERRED and WHY:**
+
+- There is **no device, microphone, or foreground service here** (always-on listening and
+  the mic foreground service are Phase 4), so the gate is **NOT started by the app at
+  runtime yet**; it is validated by its pure JVM unit tests. Real continuous capture,
+  on-device wake-word spotting, and on-device speaker verification are deferred to a
+  **Phase-0 hardware benchmark** and are NOT claimed as validated.
+- The **Phase-0 model selection** for wake-word and speaker verification (Picovoice vs
+  sherpa-onnx keyword spotting / speaker-embedding models, etc.) is still **pending**; no
+  model weight or native ML dependency is bundled, and the DEFAULT wired detector/verifier
+  are fakes so the app builds and runs in an emulator without a model.
+- **Enrollment UI is out of scope for Phase 3.** The gate consumes a `SpeakerVerifier`; the
+  enroll-my-voice flow (and the write of the metadata-only `voice_profile_metadata` row)
+  lands with the real speaker model on a device. The existing user-deletable metadata entity
+  and settings delete entry points already anticipate it.
+- **Privacy invariant (unchanged, re-affirmed):** the raw audio frames handed to the
+  detector/verifier are transient locals discarded immediately after each scan iteration;
+  no biometric template or voice embedding is stored by the gate, and nothing audio- or
+  score-related is added to `action_runs` or any DB table. The DB schema is unchanged in
+  Phase 3.
+
+- Verified on a real dev machine (JDK 17 via the Gradle-provisioned Adoptium 17 toolchain):
+  `./gradlew :core:voice:test` passes (existing Fakes/Recording tests + the 10 new
+  `WakeWordStateMachineTest` cases) and `./gradlew :app:compileDebugKotlin` succeeds with
+  the Phase-3 container wiring. The 11 `:core:data` Robolectric tests remain a device-less-CI
+  gotcha only (they pass on a normal machine); no sandbox path was re-introduced.

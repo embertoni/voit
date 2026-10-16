@@ -72,3 +72,28 @@ Voit is privacy-first and local-first. Core principles:
     The on-device behavior is therefore NOT validated here; the wiring is validated by
     inspection plus the pure-model JVM tests. When a real capture source lands, the gate is
     the single place that must gate capture on an actual grant.
+
+## Phase 3 invariants (wake word & speaker verification scaffolding)
+
+- **Raw audio is NOT retained by the gate.** The hands-free `WakeWordController`
+  (`core:voice`) hands each capture frame to `WakeWordDetector.detect` / `SpeakerVerifier
+  .verify` as a transient local scoped to one scan-loop iteration; it is never assigned to a
+  field, never placed on a `WakeState`, and never persisted. Nothing audio-related is added
+  to `action_runs` or any other DB table, and the Room schema is unchanged in Phase 3.
+- **Speaker verification is a GATE, not a capture, and stores no biometric template.** The
+  verifier yields only a boolean + a numeric score. The only speaker-related persistence is
+  the pre-existing `voice_profile_metadata` row (engine/model version, enrollment date,
+  threshold, optional last-verified timestamp) - metadata only, no raw audio and no
+  embedding - and it remains user-deletable at any time. The gate itself persists nothing.
+- **A false trigger never starts a capture.** A wake-word hit that fails speaker
+  verification (or falls below the configured score threshold) silently rearms the gate back
+  to listening; it never invokes the `onTriggered` hand-off, so a mismatched speaker cannot
+  start recording. Speaker verification is required only when the user has enabled it
+  (`AppSettings.speakerVerificationEnabled`, privacy-safe default off).
+- **Diagnostics remain codes, not content.** A rejected trigger surfaces only a stable
+  `WakeErrorCode` (SPEAKER_MISMATCH / VERIFIER_FAILURE / DETECTOR_FAILURE) plus, for a
+  mismatch, the numeric verifier score. No captured audio is ever recorded in diagnostics.
+- **Still no always-on listening at runtime.** The gate is not started by the app yet;
+  continuous capture and the mic foreground service are Phase 4. Phase 3 adds only the pure,
+  unit-tested decision logic behind the existing detector/verifier interfaces, validated
+  off-device.

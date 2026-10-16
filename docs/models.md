@@ -40,3 +40,17 @@ When a model is adopted it MUST be listed here with:
   model** (it uses the device's own recognizer when available) and is **not** the default;
   it is unvalidated off-device and routes to the editable-transcript fallback when
   unavailable.
+
+## Phase 3 status (wake word + speaker verification scaffolding)
+
+- The real **wake-word and speaker-verification model choices are still pending the Phase-0
+  hardware benchmark**. No model weight file and no native ML runtime (Picovoice /
+  sherpa-onnx keyword spotting / speaker-embedding models, etc.) has been added in Phase 3.
+- `core:voice` still ships **interfaces + fakes only** for `WakeWordDetector` and
+  `SpeakerVerifier`. The new pure `WakeWordController` gate consumes those interfaces; the
+  DEFAULT detector/verifier wired into the app are `FakeWakeWordDetector(shouldDetect =
+  false)` and `FakeSpeakerVerifier`, so the app builds and runs without any model and never
+  spuriously triggers.
+- No enrollment flow and no on-device embedding are added. The `voice_profile_metadata` row
+  stays metadata-only and user-deletable; a real speaker model + enrollment lands on a
+  device during/after the Phase-0 benchmark.
