@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,6 +71,22 @@ fun CommandEditorScreen(
                 label = "Trigger phrases (comma separated)",
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                Text(
+                    text = if (draft.enabled) "Enabled" else "Disabled",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = draft.enabled,
+                    onCheckedChange = viewModel::setEnabled,
+                )
+            }
+
             VoitSectionHeader(text = "Confirmation policy")
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -102,21 +119,37 @@ fun CommandEditorScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            draft.actions.forEachIndexed { index, type ->
-                Row(
+            draft.actions.forEachIndexed { index, action ->
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(spacing.xs),
                 ) {
-                    Text(
-                        text = "${index + 1}. ${type.name}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    VoitIconButton(
-                        icon = Icons.Filled.Delete,
-                        contentDescription = "Remove ${type.name}",
-                        onClick = { viewModel.removeActionAt(index) },
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${index + 1}. ${action.type.name}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        VoitIconButton(
+                            icon = Icons.Filled.Delete,
+                            contentDescription = "Remove ${action.type.name}",
+                            onClick = { viewModel.removeActionAt(index) },
+                        )
+                    }
+                    // Per-action argument inputs, one per declared schema parameter. Each is a
+                    // plain text field; the ViewModel parses the raw string into the typed
+                    // ParamValue at save time (so free text is never passed untyped).
+                    viewModel.paramNames(action.type).forEach { param ->
+                        val required = viewModel.isParamRequired(action.type, param)
+                        VoitTextField(
+                            value = action.rawArgs[param].orEmpty(),
+                            onValueChange = { viewModel.setActionArg(index, param, it) },
+                            label = param + if (required) " (required)" else " (optional)",
+                        )
+                    }
                 }
             }
 
