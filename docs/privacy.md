@@ -19,3 +19,22 @@ Voit is privacy-first and local-first. Core principles:
 - **No arbitrary execution.** Commands run only through a typed, allow-listed action
   registry; there is no arbitrary code or shell execution, and higher-risk actions require
   explicit confirmation.
+
+## Data at rest and backups
+
+- **Diagnostics store codes, not content (enforced in the schema).** The `action_runs`
+  table persists only redacted status/result/error codes. It has no column for a
+  transcript, note/task text, or audio. There is nowhere for user content to leak into
+  the diagnostics audit trail.
+- **Voice profiles are metadata only and deletable.** The `voice_profile_metadata` table
+  stores engine/model version, enrollment date, a verification threshold, and an optional
+  last-verified timestamp. It holds no raw audio and no biometric template, and the user
+  can delete it (DAO delete) at any time.
+- **Backup encryption is behind an interface, with NO hard-coded secrets.** Full local
+  backups are produced by `BackupSerializer`/`BackupManager` and passed through an
+  `ExportEncryptor`. Phase 1 ships an explicit, documented no-op implementation
+  (`NoOpExportEncryptor`) so the content export/restore round-trip works end to end; the
+  backup is written as plaintext JSON in this phase. There are no embedded keys or
+  passwords. A real user-supplied-password -> KDF -> authenticated-encryption (AEAD) flow
+  is planned for a later phase and will replace the no-op implementation without changing
+  the backup content model.

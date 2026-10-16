@@ -121,3 +121,56 @@ Explicit non-goals for Phase 1, consistent with the privacy/architecture require
 - Verified: `./gradlew :core:domain:test :core:interpretation:test :core:actions:test
   :core:voice:test` and the full `./gradlew test` suite pass (67 JVM unit tests, 0
   failures).
+
+### FEAT-003 (persistence layer: Room, repositories, export/backup, settings)
+
+- **Room is wired into `core:data`** (already a `com.android.library` module from
+  scaffolding) with runtime + ktx + the KSP compiler. Entities: `NoteEntity`,
+  `TaskEntity`, `CommandDefinitionEntity`, `ActionRunEntity`, `VoiceProfileMetadataEntity`.
+- **Privacy-shaped entities.** `ActionRunEntity` stores ONLY redacted codes (status /
+  result code / error code), never a transcript, note/task text, or raw audio.
+  `VoiceProfileMetadataEntity` is metadata only (engine, model version, enrollment date,
+  threshold, optional `lastVerifiedAt`) with a DAO delete, so it is user-deletable and
+  holds no raw audio or biometric template.
+- **Single-column serialization.** A note's structured `List<NoteBlock>` and its tag list
+  are serialized to single JSON string columns via `NoteBlockCodec` / `TagListCodec` (in
+  `core:domain`). Command argument schema and action sequence use `CommandCodec`. A tiny
+  dependency-free JSON codec (`com.voit.domain.Json`) backs all of them so the pure domain
+  core pulls in no serialization framework; the same codec is reused for backup, giving a
+  single on-disk/in-backup format. Round-trips are covered by tests.
+- **Repository interfaces live in `core:domain`** (`NoteRepository`, `TaskRepository`,
+  `CommandRepository`, `SettingsRepository`) so UI/ViewModels depend on abstractions.
+  Room-backed impls (`RoomNoteRepository`, `RoomTaskRepository`, `RoomCommandRepository`,
+  `DataStoreSettingsRepository`) live in `core:data`; in-memory `Fake*` impls live in
+  `core:domain` for ViewModel tests and the simulator. Note/task create and update run in
+  a single `withTransaction` (atomic); create aborts on a duplicate id and update aborts
+  on a missing id, surfaced as `RepositoryConflictException`. Note update reads the row
+  inside the transaction to preserve the archived/deleted flags the domain `Note` does not
+  carry. Search covers title + tags + block content (notes) and title + body (tasks).
+- **Export / backup.** `NoteExporter` renders a note to markdown and plain text.
+  `Backup` + `BackupSerializer` + `BackupManager` do a complete local backup/restore of all
+  notes/tasks/commands/settings with a tested content round-trip (fakes and Room-backed).
+  Backup encryption sits behind the `ExportEncryptor` interface; Phase 1 ships the
+  explicit, documented `NoOpExportEncryptor` pass-through, with NO hard-coded secrets. A
+  real password/KDF/AEAD impl is deferred (see docs/privacy.md).
+- **AppSettings** persist via DataStore preferences (`DataStoreSettingsRepository`),
+  exposed as a `Flow`. Defaults are privacy-safe: listening OFF, cloud OFF, recognition
+  language `pt-BR` (configurable), review mode ON; model-config fields are placeholders.
+- **Room migration + test (no-emulator limitation).** The DB is version 2 with an additive
+  `MIGRATION_1_2` adding the nullable `voice_profile_metadata.lastVerifiedAt` column.
+  Schema export is enabled (`room.schemaLocation` -> `core/data/schemas/`) and the exported
+  v1 + v2 schema JSON are committed (`.gitignore` un-ignores `**/schemas/`). Because this
+  sandbox has NO Android emulator/device, Room's instrumented `MigrationTestHelper` cannot
+  run here. Per the spec's fallback, the migration is instead validated by a JVM test
+  (`MigrationSchemaTest`) that diffs the committed v1 vs v2 schema JSON and asserts the
+  delta is exactly the one column the migration SQL adds (and that no other table changes).
+  This is schema-level validation, not a live runtime migration run; the limitation is
+  recorded here as required by the spec.
+- **Robolectric for JVM-runnable Room tests.** The Room-backed repositories, the Room
+  backup round-trip, and DataStore are exercised on the JVM via Robolectric against real
+  in-memory SQLite / a temp-file DataStore (no device needed). Robolectric's download lock
+  and runtime cache are redirected into the writable sandbox tree by setting
+  `-Duser.home=/projects/sandbox/fakehome` on the unit-test task (the real `/root` HOME is
+  read-only). This is a sandbox-specific test configuration.
+- Verified: `./gradlew :core:data:test` (16 tests), full `./gradlew test` (120 JVM unit
+  tests, 0 failures), and `./gradlew assembleDebug` (APK built) all pass.
