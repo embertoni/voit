@@ -88,3 +88,36 @@ Explicit non-goals for Phase 1, consistent with the privacy/architecture require
   placeholder types/screens and passing placeholder tests; real content lands in later
   features. Room schema export is not yet enabled (no entities exist); `schemas/` is
   git-ignored for now and the decision will be revisited when `core:data` gains entities.
+
+### FEAT-002 (domain core, parsers, action registry, voice interfaces)
+
+- The standalone task domain model is named `TaskItem` to avoid a name clash with the
+  in-note checkbox block `NoteBlock.Task`. Both are required by the spec; the distinct
+  name keeps them unambiguous.
+- Determinism is achieved by injecting a `Clock` (`FixedClock`/`MutableClock` for tests,
+  `SystemClock` in production) and an `IdGenerator` (`SequentialIdGenerator` for tests,
+  `UuidGenerator` in production). Note/Task ids are UUID strings; timestamps are epoch
+  millis supplied by the clock.
+- `FormattingParser` keeps all three representations (`rawTranscript`,
+  `normalizedTranscript`, `documentBlocks`). Numbered-list / "next item" directives are
+  modeled as `NoteBlock.Bullet` (ordering is positional) since the block model has no
+  dedicated ordered-list variant. Code blocks are copied verbatim and are NOT
+  re-interpreted for directives (literal). Unmatched bold/italic boundaries and unclosed
+  code blocks preserve the content and set `reviewRequired = true`; nothing is discarded.
+- `ActionRegistry` is the sole authorizer. Risk tiers: create/list/search/transient-UI =
+  LOW; append/update/archive/complete/reschedule/reminder/open-app = MEDIUM; export =
+  HIGH (confirmation mandatory). Match confidence can gate a LOW-risk auto-run but can
+  never authorize a HIGH / confirmation-mandatory action. Multiple candidate targets
+  always return `NeedsChoice` (never auto-pick). Unknown types are rejected on authorize
+  and throw `UnknownActionException` on execute.
+- `WorkflowRunner` enforces `MAX_STEPS = 5`, rejects empty workflows, checks a
+  `CancellationToken` before each step, applies each handler's own timeout via
+  `withTimeout`, stops on the first failure (`PartialFailure`), and de-duplicates by
+  idempotency key (`AlreadyRun`).
+- `core:voice` ships adapter INTERFACES (`AudioSessionController`, `WakeWordDetector`,
+  `SpeakerVerifier`, `SpeechRecognizerEngine`, `IntentInterpreter`, `ActionExecutor`) with
+  pure in-memory fakes only. No native/ML dependency (sherpa-onnx / whisper.cpp /
+  llama.cpp / Picovoice) is introduced, per the privacy/Phase-1 constraints.
+- Verified: `./gradlew :core:domain:test :core:interpretation:test :core:actions:test
+  :core:voice:test` and the full `./gradlew test` suite pass (67 JVM unit tests, 0
+  failures).
