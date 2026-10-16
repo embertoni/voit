@@ -25,12 +25,6 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
-            all { test ->
-                // The sandbox HOME (/root) is read-only, so Robolectric must not write its
-                // download lock / cached android-all runtime there. Redirect user.home and
-                // its dependency cache into the writable sandbox tree.
-                test.systemProperty("user.home", "/projects/sandbox/fakehome")
-            }
         }
     }
 }
