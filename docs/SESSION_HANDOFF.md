@@ -170,16 +170,23 @@ DB table; diagnostics are stable codes only; no cloud/network in the core path.
 ## 7. Immediate next steps (pick up here)
 
 1. **Merge the Phase-5 PR** (`feat/phase-5-commands-workflow` → `main`) if not already done.
-2. **Finish wiring Phase 5 end-to-end** — these are device-INDEPENDENT and the natural next
-   increments (all called out in `docs/decisions.md` Phase-5 "DEFERRED"):
-   - **Per-action argument capture in the command editor** (today the editor models actions
-     as `List<ActionType>`, so saved `ActionRequest`s have empty args and `argumentSchema`
-     stays default-empty). Add an enable/disable toggle too (`enabled` is hard-coded true).
-   - **Give `DefaultHandlers` real effects** — they are all `EchoActionHandler` placeholders;
-     wire them to the repositories/platform services so a dispatched workflow actually
-     mutates notes/tasks.
-   - **Audit `ActionRunEntity`** — map a `WorkflowOutcome` to redacted status/result/error
-     CODES (no content) and persist via the existing `ActionRunDao` (nothing writes it yet).
+2. **Finish wiring Phase 5 end-to-end** — remaining device-INDEPENDENT increment:
+   - ✅ **DONE (Phase-5 follow-up):** `DefaultHandlers` now has real repository-backed
+     note/task handlers via `DefaultHandlers.withRepositories(...)` (wired in
+     `VoitContainer`), so a dispatched command actually mutates notes/tasks. A redacted
+     audit trail (`ActionRun` / `ActionRunRepository` / `RoomActionRunRepository` /
+     `ActionRunRecorder`) maps a `WorkflowOutcome`/`CommandDispatchResult` to a code-only
+     `action_runs` record (codes + ids, never content).
+   - ⬜ **STILL TODO:** **Per-action argument capture in the command editor.** The editor
+     still models actions as `List<ActionType>`, so saved `ActionRequest`s have empty args
+     and `argumentSchema` stays default-empty; a command needing an arg (e.g.
+     `APPEND_TO_NOTE`) validates to `Rejected` at dispatch rather than running. Add arg
+     inputs keyed off each handler's `ParamSpec` schema, plus an enable/disable toggle
+     (`enabled` is hard-coded true). Also: have a ViewModel actually CALL
+     `commandDispatcher.dispatch` + `actionRunRecorder.record` from a user action (the
+     dispatcher/recorder are wired in DI but not yet invoked from any screen).
+   - Non-persistence handlers (timers, overlay, listening, open-app, speak, export) remain
+     echo placeholders — they need platform runtime from later phases.
 3. **Phase 6** (optional local LLM + polish) and **Phase 7** (release hardening) remain,
    per the plan. The real on-device model selection still awaits the **Phase-0 benchmark**
    on a physical Android phone.

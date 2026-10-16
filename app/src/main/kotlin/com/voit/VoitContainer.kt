@@ -7,9 +7,13 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import com.voit.actions.ActionRegistry
+import com.voit.actions.ActionRunRecorder
 import com.voit.actions.CommandDispatcher
+import com.voit.actions.DefaultHandlers
 import com.voit.actions.TranscriptProcessor
 import com.voit.actions.WorkflowRunner
+import com.voit.data.RoomActionRunRepository
+import com.voit.domain.ActionRunRepository
 import com.voit.data.DataStoreSettingsRepository
 import com.voit.data.RoomCommandRepository
 import com.voit.data.RoomNoteRepository
@@ -62,7 +66,19 @@ class VoitContainer(context: Context) {
     val commandRepository: CommandRepository = RoomCommandRepository(database)
     val settingsRepository: SettingsRepository = DataStoreSettingsRepository(settingsDataStore)
 
-    val actionRegistry: ActionRegistry = ActionRegistry()
+    // The registry is now built with PRODUCTION handlers: note/task actions are backed by
+    // the real repositories (so a dispatched command actually persists), while actions that
+    // still need platform runtime not yet built (timers, overlay, listening, open-app,
+    // speak, export) remain echo placeholders. The registry stays the SOLE authorizer and
+    // every handler's contract (schema/risk/confirmation) is unchanged.
+    val actionRegistry: ActionRegistry = ActionRegistry(
+        DefaultHandlers.withRepositories(
+            notes = noteRepository,
+            tasks = taskRepository,
+            clock = SystemClock,
+            ids = UuidGenerator,
+        ),
+    )
 
     val transcriptProcessor: TranscriptProcessor = TranscriptProcessor(
         registry = actionRegistry,
@@ -80,6 +96,18 @@ class VoitContainer(context: Context) {
     val workflowRunner: WorkflowRunner = WorkflowRunner(actionRegistry)
 
     val commandDispatcher: CommandDispatcher = CommandDispatcher(actionRegistry, workflowRunner)
+
+    // Redacted audit trail: a dispatched command writes exactly one code-only ActionRun
+    // record (status + error CODE, never transcript/content). The recorder maps the
+    // WorkflowOutcome/CommandDispatchResult to stable codes; the Room repo persists to the
+    // existing `action_runs` table (metadata only, user-clearable).
+    val actionRunRepository: ActionRunRepository = RoomActionRunRepository(database)
+
+    val actionRunRecorder: ActionRunRecorder = ActionRunRecorder(
+        repository = actionRunRepository,
+        clock = SystemClock,
+        ids = UuidGenerator,
+    )
 
     // --- Phase 2 voice pieces -------------------------------------------------------------
     // The DEFAULT recognizer wired here is a FAKE PLACEHOLDER. There is no real on-device
