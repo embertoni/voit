@@ -512,3 +512,72 @@ permission flow off-device. No live foreground service, notification, or overlay
   `OverlayPermissionModelTest` added, alongside the existing permission/ASR tests), the full
   `./gradlew test` suite passes, and `./gradlew :app:assembleDebug` builds the APK with the
   Phase-4 manifest capabilities merged. No sandbox path was re-introduced.
+
+### Phase 5 (configurable commands + bounded workflow engine)
+
+Phase 5 closes the gap between the stored command editor and the bounded workflow engine.
+Before this phase the pieces existed but were ORPHANED: `feature:commands` persisted a
+`CommandDefinition` (allow-listed actions, capped at 5) and `WorkflowRunner` could run a
+`Workflow`, but NOTHING matched a transcript against a command's trigger phrases and
+dispatched its actions - `WorkflowRunner` had no production caller and no saved command was
+ever executed. Phase 5 adds that seam as pure, device-independent logic.
+
+**What was BUILT:**
+
+- **`CommandDispatcher` (`core:actions`).** A pure component that:
+  1. matches a transcript against the ENABLED commands' trigger phrases
+     (case-insensitive, whole-word boundaries - the same discipline the `IntentParser`
+     uses, so "note" never fires inside "notebook"; blank phrases ignored);
+  2. applies the command's `ConfirmationPolicy` together with the `ActionRegistry`
+     authorization of EACH action - the registry stays the SOLE authorizer, so a HIGH /
+     confirmation-mandatory action (e.g. `EXPORT_NOTE`) is ALWAYS gated even under a
+     command's `NONE` policy;
+  3. on a clear, authorized match builds a bounded `Workflow` from the command's ordered
+     actions and runs it through the existing `WorkflowRunner`, so `MAX_STEPS`, per-step
+     timeout, cancellation, and idempotency all still apply.
+  It returns a sealed `CommandDispatchResult` (`NoMatch` / `NeedsChoice` /
+  `NeedsConfirmation` / `Rejected` / `Dispatched(outcome)`). Multiple matching commands
+  return `NeedsChoice` and are NEVER auto-picked (mirroring the registry's target-ambiguity
+  rule). The default idempotency key is the matched command id, so re-issuing the same
+  command is de-duplicated by the runner.
+- **DI wiring (`VoitContainer`).** A `WorkflowRunner` and `CommandDispatcher` are now
+  constructed in the container, giving the workflow engine its first production caller. No
+  new module dependency: `CommandDispatcher` lives in `core:actions` alongside the registry
+  and runner and depends only on `core:domain`.
+
+**Design choices:**
+
+- **`IF_AMBIGUOUS` maps to the multi-command choice gate.** A single matched command is
+  unambiguous, so the command's own `IF_AMBIGUOUS` policy adds no confirmation; ambiguity
+  is surfaced as the multi-match `NeedsChoice`. Per-target ambiguity INSIDE an action stays
+  the registry's `NeedsChoice` contract, which the caller resolves (by passing resolved
+  `candidateTargets`) before dispatch - unchanged from the FEAT-002 contract.
+- **The registry is never bypassed.** Authorization is computed per action; an unknown or
+  schema-invalid action rejects the whole command, and any action needing confirmation (or
+  an `ALWAYS` policy) gates the command until `confirmed = true` is passed back.
+
+**What was DEFERRED and WHY (honest scope):**
+
+- **No per-action argument capture in the editor yet.** The command editor still models
+  actions as `List<ActionType>`, so saved `ActionRequest`s carry empty args and the
+  per-command `argumentSchema` stays the default empty schema from the UI (the JSON codec
+  and backup already round-trip non-empty schemas). Adding argument capture to the editor is
+  a follow-up; the dispatcher already authorizes/validates whatever args a command carries,
+  so an action that REQUIRES an arg is correctly `Rejected` today rather than run with a
+  missing arg.
+- **Handlers still echo.** All `DefaultHandlers` remain `EchoActionHandler` placeholders;
+  wiring them to the real repositories/platform services (so a dispatched workflow actually
+  mutates notes/tasks) is deferred. The dispatch PATH is complete and tested; the handler
+  SIDE-EFFECTS are the next increment.
+- **No `ActionRunEntity` audit write yet.** The redacted-code audit sink
+  (`action_runs`) exists but nothing writes a `WorkflowOutcome` to it. Mapping outcome ->
+  status/resultCode/errorCode (codes only, no content) is a small follow-up kept out of this
+  change to keep the phase focused on the execution seam.
+- **Privacy invariant (unchanged):** the dispatcher handles typed actions only; no raw
+  audio, no transcript content, and nothing is persisted by it. Diagnostics stay codes only.
+
+- Verified on a real dev machine (JDK 17 via the Gradle-provisioned Adoptium 17 toolchain):
+  `./gradlew :core:actions:test` passes (12 new `CommandDispatcherTest` cases alongside the
+  existing registry/runner/processor tests), the full `./gradlew test` suite passes, and
+  `./gradlew :app:assembleDebug` builds the APK with the Phase-5 DI wiring. No sandbox path
+  was re-introduced.

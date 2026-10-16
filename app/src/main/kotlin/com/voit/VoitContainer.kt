@@ -7,7 +7,9 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import com.voit.actions.ActionRegistry
+import com.voit.actions.CommandDispatcher
 import com.voit.actions.TranscriptProcessor
+import com.voit.actions.WorkflowRunner
 import com.voit.data.DataStoreSettingsRepository
 import com.voit.data.RoomCommandRepository
 import com.voit.data.RoomNoteRepository
@@ -67,6 +69,17 @@ class VoitContainer(context: Context) {
         clock = SystemClock,
         ids = UuidGenerator,
     )
+
+    // --- Phase 5 configurable-commands / workflow engine ---------------------------------
+    // The bounded WorkflowRunner and the CommandDispatcher that drives it existed as pure,
+    // unit-tested components but had NO production caller: nothing matched a transcript
+    // against a stored CommandDefinition and ran its actions. These wire that path. The
+    // registry remains the SOLE authorizer (a HIGH / confirmation-mandatory action stays
+    // gated regardless of a command's own policy), and MAX_STEPS / per-step timeout /
+    // idempotency all still apply via the runner. Pure JVM: no Android, network, or model.
+    val workflowRunner: WorkflowRunner = WorkflowRunner(actionRegistry)
+
+    val commandDispatcher: CommandDispatcher = CommandDispatcher(actionRegistry, workflowRunner)
 
     // --- Phase 2 voice pieces -------------------------------------------------------------
     // The DEFAULT recognizer wired here is a FAKE PLACEHOLDER. There is no real on-device
