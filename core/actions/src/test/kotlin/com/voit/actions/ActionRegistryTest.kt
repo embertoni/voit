@@ -101,6 +101,22 @@ class ActionRegistryTest {
     }
 
     @Test
+    fun mediumRiskLowConfidenceNeedsConfirmation() {
+        // A MEDIUM-risk mutation must be at least as well-gated as a LOW-risk read: a
+        // low-confidence match falls through to confirmation even with an unambiguous target.
+        val req = ActionRequest(ActionType.ARCHIVE_NOTE, mapOf("noteId" to ParamValue.Text("n1")))
+        val decision = registry.authorize(req, matchConfidence = 0.3)
+        assertTrue(decision is AuthorizationDecision.NeedsConfirmation)
+    }
+
+    @Test
+    fun mediumRiskConfidentMatchAuthorized() {
+        val req = ActionRequest(ActionType.ARCHIVE_NOTE, mapOf("noteId" to ParamValue.Text("n1")))
+        val decision = registry.authorize(req, matchConfidence = 0.9)
+        assertTrue(decision is AuthorizationDecision.Authorized)
+    }
+
+    @Test
     fun executeReturnsEchoedArgs() = runTest {
         val req = ActionRequest(ActionType.SPEAK_RESPONSE, mapOf("text" to ParamValue.Text("hello")))
         val result = registry.execute(req)

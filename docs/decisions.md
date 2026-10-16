@@ -246,3 +246,43 @@ Explicit non-goals for Phase 1, consistent with the privacy/architecture require
 - Verified: full `./gradlew test` (161 JVM unit tests, 0 failures) and
   `./gradlew assembleDebug` (BUILD SUCCESSFUL, `app/build/outputs/apk/debug/app-debug.apk`
   produced). Design system reviewed: no accent colours, no colour-only state encoding.
+
+### Post-review hardening (review-driven, Phase 1)
+
+A semantic review of the Phase-1 foundation (APPROVED) raised four confirmed, non-blocking
+findings. All four are addressed here, each pinned by a test; scope is unchanged (no native
+ML/model deps, no cloud, no real mic/overlay/FGS runtime).
+
+- **Substring intent matching tightened (`IntentParser`).** The lowest-confidence
+  `SUBSTRING` rung used to fire whenever a trigger appeared *anywhere* in the input, so an
+  incidental fragment could match (e.g. "timer" inside "timers"). It now requires the
+  trigger to appear on whole-word boundaries (a standalone run of tokens: each end is
+  either the string edge or a space), and single-token aliases shorter than
+  `MIN_SUBSTRING_TOKEN_LEN` (4) are excluded from substring matching entirely. The
+  ergonomic case "hey could you start a timer please" still matches because the full phrase
+  is present as whole words. Pinned by `IntentParserTest.incidentalSubstringDoesNotMatchInsideLongerWord`
+  and `...incidentalTriggerPhraseBuriedMidSentenceStillMatchesAsStandaloneTokens`.
+- **MEDIUM risk now honours match confidence (`ActionRegistry.authorize`).** Previously a
+  MEDIUM-risk mutation (append/update/archive/complete) authorized at ANY confidence as
+  long as the target was unambiguous — a strictly weaker gate than LOW risk. A MEDIUM
+  mutation is now at least as well-gated as a LOW-risk read: below
+  `MEDIUM_RISK_CONFIDENCE_THRESHOLD` (0.6, same as LOW) it falls through to
+  `NeedsConfirmation` instead of auto-authorizing. HIGH risk is unchanged (always gated;
+  confidence can never authorize it). Pinned by `ActionRegistryTest.mediumRiskLowConfidenceNeedsConfirmation`
+  and `...mediumRiskConfidentMatchAuthorized`.
+- **`NeedsChoice` / target-resolution contract documented.** The registry does NOT resolve
+  targets; it returns `NeedsChoice` ONLY when the caller passes more than one candidate in
+  `candidateTargets`. An empty list asserts "unambiguous (or no target)". A caller that
+  handles references to existing notes/tasks MUST resolve them and pass the candidates,
+  otherwise a genuinely ambiguous reference silently skips the choice gate. This is now
+  spelled out in the KDoc on `authorize`. For Phase 1 the simulator never names an existing
+  target, so this is latent; the contract is recorded here for the next integrator. (A
+  deeper fix — pushing resolution into the authorizer — is deferred as it needs repository
+  access the pure `core:actions` module intentionally does not have.)
+- **Fallback task title capped (`TranscriptProcessor.firstLine`).** Because
+  `FormattingParser` normalization collapses newlines to spaces, the "first line" was the
+  whole transcript, so a create-task with no title slot/heading produced an entire
+  paragraph as its title. The fallback is now capped to the first `MAX_FALLBACK_TITLE_WORDS`
+  (8) words and `MAX_FALLBACK_TITLE_CHARS` (60) characters, with an ellipsis marking
+  truncation. Pinned by `TranscriptProcessorTest.create-task fallback title is capped and
+  not the entire transcript`.

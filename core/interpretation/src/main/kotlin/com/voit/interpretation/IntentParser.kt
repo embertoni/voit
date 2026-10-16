@@ -89,16 +89,50 @@ class IntentParser(private val triggers: List<TriggerDefinition>) {
                 }
             }
         }
-        // Substring (phrase appears somewhere in the input).
+        // Substring, but only as a STANDALONE token run (word boundaries), so a trigger
+        // must appear as whole words — not buried inside a longer word and not as an
+        // incidental fragment. This keeps the ergonomic "hey could you start a timer
+        // please" case working while rejecting "timer" inside "the timers are broken" or
+        // a trigger that only overlaps a longer word. A guard also drops ultra-short
+        // single-token aliases (< MIN_SUBSTRING_TOKEN_LEN chars) from substring matching
+        // so one incidental short word cannot fire an intent from unrelated text.
         for (p in trigger.phrases + trigger.aliases) {
-            if (inputCollapsed.contains(collapseSpaces(p.lowercase()))) {
+            val phrase = collapseSpaces(p.lowercase())
+            if (phrase.isEmpty()) continue
+            val isSingleToken = !phrase.contains(' ')
+            if (isSingleToken && phrase.length < MIN_SUBSTRING_TOKEN_LEN) continue
+            if (containsAsStandaloneTokens(inputCollapsed, phrase)) {
                 return TriggerMatch(MatchKind.SUBSTRING.confidence, p, null)
             }
         }
         return null
     }
 
+    /**
+     * True when [phrase] occurs in [input] on whole-word boundaries (both ends are either
+     * the string edge or a space), i.e. as a standalone run of tokens rather than as a
+     * fragment inside a longer word. Both arguments are expected to be lowercased and
+     * space-collapsed.
+     */
+    private fun containsAsStandaloneTokens(input: String, phrase: String): Boolean {
+        var from = 0
+        while (true) {
+            val idx = input.indexOf(phrase, from)
+            if (idx < 0) return false
+            val beforeOk = idx == 0 || input[idx - 1] == ' '
+            val endIdx = idx + phrase.length
+            val afterOk = endIdx == input.length || input[endIdx] == ' '
+            if (beforeOk && afterOk) return true
+            from = idx + 1
+        }
+    }
+
     private fun collapseSpaces(s: String): String = s.trim().replace(Regex("\\s+"), " ")
+
+    private companion object {
+        /** Minimum length for a single-token alias to be eligible for substring matching. */
+        const val MIN_SUBSTRING_TOKEN_LEN = 4
+    }
 }
 
 /**

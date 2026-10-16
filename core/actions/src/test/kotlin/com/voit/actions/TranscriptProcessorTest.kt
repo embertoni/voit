@@ -80,6 +80,28 @@ class TranscriptProcessorTest {
     }
 
     @Test
+    fun `create-task fallback title is capped and not the entire transcript`() {
+        // No "titled/called" slot and no heading, so the title falls back to the
+        // transcript. normalize() collapses newlines, so without a cap the whole long
+        // transcript would become the title. It must be capped instead.
+        val transcript =
+            "create a task buy milk eggs bread butter cheese coffee tea sugar " +
+                "flour rice beans and a whole lot of other groceries from the store"
+        val result = processor().process(transcript)
+
+        val task = assertNotNull(result.task, "a task should be produced")
+        assertTrue(
+            task.title.length < transcript.length,
+            "fallback title must not be the entire transcript",
+        )
+        assertTrue(
+            task.title.length <= TranscriptProcessor.MAX_FALLBACK_TITLE_CHARS + 1,
+            "fallback title length ${task.title.length} exceeds the cap",
+        )
+        assertTrue(task.title.endsWith("…"), "a truncated fallback title is marked with an ellipsis")
+    }
+
+    @Test
     fun `unresolved formatting flags the note for review without discarding content`() {
         val transcript = "note bold important"
         val result = processor().process(transcript)

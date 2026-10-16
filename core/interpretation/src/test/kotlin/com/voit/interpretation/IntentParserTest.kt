@@ -72,6 +72,22 @@ class IntentParserTest {
     }
 
     @Test
+    fun incidentalSubstringDoesNotMatchInsideLongerWord() {
+        // "timer" is an alias, but here it is a fragment of "timers" — not a standalone
+        // token, so it must NOT fire the start_timer intent.
+        assertNull(parser.parse("the old timers were talking about the weather"))
+    }
+
+    @Test
+    fun incidentalTriggerPhraseBuriedMidSentenceStillMatchesAsStandaloneTokens() {
+        // The ergonomic case: the full trigger phrase appears as whole words in a longer
+        // utterance, so substring matching should still catch it.
+        val intent = parser.parse("hey could you start a timer please")!!
+        assertEquals("start_timer", intent.name)
+        assertEquals(MatchKind.SUBSTRING.confidence, intent.confidence)
+    }
+
+    @Test
     fun durationSlotDigits() {
         val slots = SlotParser().extract("remind me in 5 minutes")
         assertEquals(ParamValue.Duration(300), slots["duration"])

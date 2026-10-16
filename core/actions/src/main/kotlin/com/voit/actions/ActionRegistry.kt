@@ -52,10 +52,23 @@ class ActionRegistry(handlers: List<ActionHandler> = DefaultHandlers.all()) {
     /**
      * Authorizes [request] under the confirmation policy.
      *
-     * @param matchConfidence confidence from the interpreter. It can gate a LOW-risk auto
-     *        action but can NEVER by itself authorize a confirmation-mandatory action.
-     * @param candidateTargets when a request names an ambiguous target, the resolved
-     *        candidates. More than one -> NeedsChoice; exactly matching the policy below.
+     * Ambiguity / target-resolution contract: this registry does NOT resolve targets. It
+     * only knows an action's type is ambiguous because the CALLER has already resolved the
+     * referenced target against the user's data and passed the matching candidates in
+     * [candidateTargets]. A `NeedsChoice` decision is therefore returned ONLY when the
+     * caller supplies more than one candidate; passing an empty list asserts "the target
+     * is unambiguous (or there is no target)". Callers that handle references to existing
+     * notes/tasks MUST perform that resolution and pass the candidates, otherwise a
+     * genuinely ambiguous reference silently skips the choice gate. (See docs/decisions.md,
+     * review-driven changes.)
+     *
+     * @param matchConfidence confidence from the interpreter. It can gate a LOW- or
+     *        MEDIUM-risk auto action (a low-confidence mutation falls through to
+     *        `NeedsConfirmation`) but can NEVER by itself authorize a HIGH /
+     *        confirmation-mandatory action.
+     * @param candidateTargets the caller-resolved candidate targets for an ambiguous
+     *        reference. More than one -> `NeedsChoice` (never auto-pick); empty or single
+     *        -> treated as unambiguous.
      * @param confirmed whether the user has already explicitly confirmed this request.
      */
     fun authorize(
@@ -86,12 +99,16 @@ class ActionRegistry(handlers: List<ActionHandler> = DefaultHandlers.all()) {
             }
         }
 
-        // Medium risk -> confirm only if target ambiguous (single candidate is fine).
+        // Medium risk -> confirm if the target is ambiguous (handled above) OR the match
+        // is low-confidence. A MEDIUM mutation must be at least as well-gated as LOW risk,
+        // so a low-confidence match falls through to NeedsConfirmation rather than
+        // authorizing outright.
         if (handler.risk == RiskLevel.MEDIUM) {
-            if (candidateTargets.size > 1 && !confirmed) {
-                return AuthorizationDecision.NeedsChoice(request, candidateTargets)
+            return if (confirmed || matchConfidence >= MEDIUM_RISK_CONFIDENCE_THRESHOLD) {
+                AuthorizationDecision.Authorized(request)
+            } else {
+                AuthorizationDecision.NeedsConfirmation(request, "Low-confidence mutation requires confirmation")
             }
-            return AuthorizationDecision.Authorized(request)
         }
 
         // Low risk reversible -> auto after a confident match.
@@ -114,5 +131,11 @@ class ActionRegistry(handlers: List<ActionHandler> = DefaultHandlers.all()) {
 
     companion object {
         const val LOW_RISK_CONFIDENCE_THRESHOLD = 0.6
+
+        /**
+         * Minimum confidence for a MEDIUM-risk mutation to auto-authorize. A mutation is
+         * no weaker a gate than a LOW-risk read, so it shares the same threshold.
+         */
+        const val MEDIUM_RISK_CONFIDENCE_THRESHOLD = 0.6
     }
 }

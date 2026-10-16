@@ -169,12 +169,34 @@ class TranscriptProcessor(
     fun confirm(request: ActionRequest): AuthorizationDecision =
         registry.authorize(request, confirmed = true)
 
-    private fun firstLine(text: String): String =
-        text.lineSequence().firstOrNull()?.trim().orEmpty().ifEmpty { "Untitled" }
+    /**
+     * Fallback task title derived from the transcript when no title slot and no heading
+     * exist. Because [FormattingParser] normalization collapses newlines to spaces, the
+     * "first line" is effectively the whole transcript, so the result is capped to the
+     * first [MAX_FALLBACK_TITLE_WORDS] words (and [MAX_FALLBACK_TITLE_CHARS] characters) to
+     * avoid a title that is an entire paragraph. An ellipsis marks truncation.
+     */
+    private fun firstLine(text: String): String {
+        val firstLine = text.lineSequence().firstOrNull()?.trim().orEmpty()
+        if (firstLine.isEmpty()) return "Untitled"
+
+        val words = firstLine.split(Regex("\\s+"))
+        var title = words.take(MAX_FALLBACK_TITLE_WORDS).joinToString(" ")
+        var truncated = words.size > MAX_FALLBACK_TITLE_WORDS
+        if (title.length > MAX_FALLBACK_TITLE_CHARS) {
+            title = title.take(MAX_FALLBACK_TITLE_CHARS).trimEnd()
+            truncated = true
+        }
+        return if (truncated) "$title…" else title
+    }
 
     companion object {
         const val INTENT_CREATE_TASK = "create_task"
         const val INTENT_EXPORT_NOTE = "export_note"
+
+        /** Caps for the fallback task title derived from the transcript (see [firstLine]). */
+        const val MAX_FALLBACK_TITLE_WORDS = 8
+        const val MAX_FALLBACK_TITLE_CHARS = 60
 
         /**
          * Phrase triggers for the Phase-1 recognizable command intents. English + a few
