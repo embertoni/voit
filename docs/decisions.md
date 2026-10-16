@@ -175,6 +175,65 @@ Explicit non-goals for Phase 1, consistent with the privacy/architecture require
 - Verified: `./gradlew :core:data:test` (16 tests), full `./gradlew test` (120 JVM unit
   tests, 0 failures), and `./gradlew assembleDebug` (APK built) all pass.
 
+### Phase 2 (local recording & ASR scaffolding)
+
+Phase 2 wires the push-to-talk path end to end **behind fakes**, exactly mirroring how
+Phase 1 wired the typed Simulator path. No real audio or model runs here.
+
+**What was BUILT:**
+
+- **Pure recording state machine (`core:voice`).** `RecordingController` +
+  `RecordingState` (Idle / Recording / Transcribing / Review) + `RecordingConfig`
+  (`maxUtteranceMillis`) + `RecordingErrorCode` (TIMEOUT / RECOGNIZER_FAILURE /
+  EMPTY_TRANSCRIPT / CANCELLED, codes only) drive the EXISTING `AudioSessionController` +
+  `SpeechRecognizerEngine` interfaces through idle -> recording -> transcribing -> review
+  with cancel, a max-utterance timeout, and a fallback to an editable/empty transcript so
+  manual entry always stays reachable. This is the **Phase-2 analogue of the Phase-1
+  `TranscriptProcessor` wiring**: a pure, device-independent, fully unit-tested state
+  holder with no Android, no network, no model.
+- **Pure permission decision model + optional on-device ASR adapter (`platform:android`).**
+  `VoicePermissionModel` encodes "request only when the feature is enabled", a staged
+  rationale (rationale before the system prompt), API-33 gating of `POST_NOTIFICATIONS`,
+  and the permanently-denied -> settings path — all unit-tested off-device. The thin
+  Android-facing requester delegates every branch to that pure model.
+  `AndroidOnDeviceSpeechRecognizer` wraps the Android framework
+  `SpeechRecognizer.createOnDeviceSpeechRecognizer()` (API 31+) behind an availability
+  guard and routes unavailability to the Phase-2 fallback. It COMPILES but is **not
+  runnable/validated here (no device)** and is **not** the default engine.
+- **Push-to-talk -> editable review -> `TranscriptProcessor` path wired into the app.** A
+  `PushToTalkViewModel` (in `feature:simulator` to avoid `settings.gradle.kts` churn) owns
+  a `RecordingController` built from injected engines + config on its own scope (the
+  Phase-1 injected-scope pattern), exposes an immutable `PushToTalkUiState` via
+  `StateFlow`, and on review-accept hands the (possibly edited) transcript to the EXISTING
+  `TranscriptProcessor.process(transcript, source = NoteSource.VOICE)`, persisting via the
+  repositories exactly like `SimulatorViewModel.persist`. The high-risk `EXPORT_NOTE`
+  `PendingConfirmation` gate is intact (never auto-run). `PushToTalkScreen` is a strictly
+  monochrome Compose screen (reusing `VoitScaffold`/`VoitButton`/`VoitTextField`/
+  `VoitSoundRing`) with a push-to-talk control, an ALWAYS-editable transcript-review field
+  (empty + clearly labelled on the fallback path), an accept action, and the confirm/dismiss
+  dialog. A new "Voice" bottom-nav destination reaches it; **the Simulator remains the start
+  destination** so the Phase-1 path is unchanged and the app still opens working.
+- **DI default is a FAKE.** `VoitContainer` constructs a `FakeSpeechRecognizerEngine`
+  (default, safe placeholder) and a `FakeAudioSessionController` with a `RecordingConfig`;
+  `VoitViewModelFactory` builds the new ViewModel mirroring the Simulator branch.
+- **Manifest.** `RECORD_AUDIO` and `POST_NOTIFICATIONS` are declared (capability only; the
+  runtime request is staged by the permission model when the feature is enabled). No
+  foreground-service or any Phase-4 permission is added.
+
+**What was DEFERRED and WHY:**
+
+- There is **no device or microphone here**, so real audio capture, on-device ASR
+  execution, airplane-mode dictation acceptance, and the **pt-BR / en-US benchmark** are
+  deferred to **Phase 0 on hardware** and are NOT claimed as validated.
+- The **Phase-0 model selection** (sherpa-onnx vs whisper.cpp vs the Android framework
+  on-device recognizer, etc.) is still **pending**; no model weight or native ML dependency
+  is bundled, and the DEFAULT wired recognizer is the `FakeSpeechRecognizerEngine` so the
+  app runs in an emulator without a model. `AndroidOnDeviceSpeechRecognizer` exists as an
+  optional provider/fallback to swap in behind the interface once validated on a device.
+- **Privacy invariant (unchanged, re-affirmed):** the raw audio buffer is a transient local
+  discarded immediately after recognition; nothing audio/transcript-related is added to
+  `action_runs` or any DB table, and the DB schema is unchanged in Phase 2.
+
 ### FEAT-004 (design system + Phase-1 UI, DI, navigation, end-to-end simulator)
 
 - **Monochrome design system (`core:design`).** The palette is strictly black / white /

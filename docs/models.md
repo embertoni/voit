@@ -24,3 +24,19 @@ When a model is adopted it MUST be listed here with:
 | Role | Model | Version | Source | SHA-256 | Size | License |
 | ---- | ----- | ------- | ------ | ------- | ---- | ------- |
 | _(none yet)_ | | | | | | |
+
+## Phase 2 status (local recording & ASR scaffolding)
+
+- The real **ASR / VAD model choice is still pending the Phase-0 hardware benchmark**. No
+  model weight file and no native ML runtime (sherpa-onnx / whisper.cpp / llama.cpp /
+  Picovoice) has been added in Phase 2.
+- `core:voice` still ships **interfaces + fakes only**. The DEFAULT recognizer wired into
+  the running app is the `FakeSpeechRecognizerEngine`, so the app builds and runs without
+  any model.
+- An **optional** Android-framework on-device recognizer adapter
+  (`AndroidOnDeviceSpeechRecognizer` in `platform:android`, wrapping
+  `SpeechRecognizer.createOnDeviceSpeechRecognizer()`, API 31+) exists as a possible
+  provider/fallback behind the `SpeechRecognizerEngine` interface. It is **not a bundled
+  model** (it uses the device's own recognizer when available) and is **not** the default;
+  it is unvalidated off-device and routes to the editable-transcript fallback when
+  unavailable.

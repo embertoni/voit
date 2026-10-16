@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":core:interpretation"))
     implementation(project(":core:actions"))
     implementation(project(":core:design"))
+    implementation(project(":core:voice"))
 
     implementation(libs.kotlinx.coroutines.core)
 

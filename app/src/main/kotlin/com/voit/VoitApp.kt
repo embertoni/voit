@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -32,6 +33,8 @@ import com.voit.feature.notes.NotesScreen
 import com.voit.feature.notes.NotesViewModel
 import com.voit.feature.settings.SettingsScreen
 import com.voit.feature.settings.SettingsViewModel
+import com.voit.feature.simulator.PushToTalkScreen
+import com.voit.feature.simulator.PushToTalkViewModel
 import com.voit.feature.simulator.SimulatorScreen
 import com.voit.feature.simulator.SimulatorViewModel
 import com.voit.feature.tasks.TasksScreen
@@ -40,6 +43,7 @@ import com.voit.feature.tasks.TasksViewModel
 /** Top-level navigation destinations (the bottom bar entries). */
 private enum class VoitDestination(val route: String, val label: String, val icon: ImageVector) {
     Simulator("simulator", "Simulator", Icons.Filled.Build),
+    Voice("voice", "Voice", Icons.Filled.PlayArrow),
     Notes("notes", "Notes", Icons.Filled.Edit),
     Tasks("tasks", "Tasks", Icons.Filled.CheckCircle),
     Commands("commands", "Commands", Icons.AutoMirrored.Filled.List),
@@ -94,6 +98,10 @@ fun VoitApp(factory: VoitViewModelFactory) {
             composable(VoitDestination.Simulator.route) {
                 val vm: SimulatorViewModel = viewModel(factory = factory)
                 SimulatorScreen(viewModel = vm)
+            }
+            composable(VoitDestination.Voice.route) {
+                val vm: PushToTalkViewModel = viewModel(factory = factory)
+                PushToTalkScreen(viewModel = vm)
             }
             composable(VoitDestination.Notes.route) {
                 val vm: NotesViewModel = viewModel(factory = factory)
