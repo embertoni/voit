@@ -12,7 +12,8 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":core:domain"))
+    api(project(":core:domain"))
+    api(project(":core:interpretation"))
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit4)

@@ -42,11 +42,21 @@ android {
 
 dependencies {
     implementation(project(":core:design"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:data"))
+    implementation(project(":core:interpretation"))
+    implementation(project(":core:actions"))
     implementation(project(":feature:notes"))
     implementation(project(":feature:tasks"))
     implementation(project(":feature:commands"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:simulator"))
+
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

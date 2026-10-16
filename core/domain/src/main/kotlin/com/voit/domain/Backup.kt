@@ -184,6 +184,7 @@ object BackupSerializer {
         "speakerVerificationEnabled" to s.speakerVerificationEnabled,
         "diagnosticsEnabled" to s.diagnosticsEnabled,
         "reviewModeEnabled" to s.reviewModeEnabled,
+        "themeMode" to s.themeMode,
     )
 
     private fun settingsFromMap(m: Map<String, Any?>): AppSettings = AppSettings(
@@ -199,6 +200,7 @@ object BackupSerializer {
         speakerVerificationEnabled = (m["speakerVerificationEnabled"] as? Boolean) ?: false,
         diagnosticsEnabled = (m["diagnosticsEnabled"] as? Boolean) ?: false,
         reviewModeEnabled = (m["reviewModeEnabled"] as? Boolean) ?: true,
+        themeMode = m["themeMode"] as? String ?: AppSettings.DEFAULT_THEME_MODE,
     )
 
     // ---- helpers ----------------------------------------------------------------

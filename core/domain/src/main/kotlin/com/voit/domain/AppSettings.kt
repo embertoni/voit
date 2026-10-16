@@ -28,11 +28,15 @@ data class AppSettings(
     val diagnosticsEnabled: Boolean = false,
     // When true, parsed results are shown for review before being committed/executed.
     val reviewModeEnabled: Boolean = true,
+    // In-app theme override. Kept as a plain string ("SYSTEM"/"LIGHT"/"DARK") so the pure
+    // domain never depends on the Compose design module. Defaults to following the system.
+    val themeMode: String = DEFAULT_THEME_MODE,
 ) {
     companion object {
         const val DEFAULT_WAKE_PHRASE = "hey voit"
         const val DEFAULT_RECOGNITION_LANGUAGE = "pt-BR"
         const val DEFAULT_REPLY_VOICE = "default"
+        const val DEFAULT_THEME_MODE = "SYSTEM"
 
         val DEFAULT = AppSettings()
     }
@@ -52,4 +56,6 @@ interface SettingsRepository {
     suspend fun setRecognitionLanguage(language: String)
 
     suspend fun setCloudProcessingEnabled(enabled: Boolean)
+
+    suspend fun setThemeMode(themeMode: String)
 }

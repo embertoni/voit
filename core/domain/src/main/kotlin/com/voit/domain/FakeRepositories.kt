@@ -179,4 +179,7 @@ class FakeSettingsRepository(initial: AppSettings = AppSettings.DEFAULT) : Setti
 
     override suspend fun setCloudProcessingEnabled(enabled: Boolean) =
         update { it.copy(cloudProcessingEnabled = enabled) }
+
+    override suspend fun setThemeMode(themeMode: String) =
+        update { it.copy(themeMode = themeMode) }
 }

@@ -38,6 +38,9 @@ class DataStoreSettingsRepository(
     override suspend fun setCloudProcessingEnabled(enabled: Boolean) =
         update { it.copy(cloudProcessingEnabled = enabled) }
 
+    override suspend fun setThemeMode(themeMode: String) =
+        update { it.copy(themeMode = themeMode) }
+
     private fun Preferences.toAppSettings(): AppSettings = AppSettings(
         listeningEnabled = this[Keys.LISTENING] ?: AppSettings.DEFAULT.listeningEnabled,
         wakePhrase = this[Keys.WAKE_PHRASE] ?: AppSettings.DEFAULT_WAKE_PHRASE,
@@ -52,6 +55,7 @@ class DataStoreSettingsRepository(
             ?: AppSettings.DEFAULT.speakerVerificationEnabled,
         diagnosticsEnabled = this[Keys.DIAGNOSTICS] ?: AppSettings.DEFAULT.diagnosticsEnabled,
         reviewModeEnabled = this[Keys.REVIEW_MODE] ?: AppSettings.DEFAULT.reviewModeEnabled,
+        themeMode = this[Keys.THEME_MODE] ?: AppSettings.DEFAULT_THEME_MODE,
     )
 
     private fun androidx.datastore.preferences.core.MutablePreferences.writeAppSettings(
@@ -68,6 +72,7 @@ class DataStoreSettingsRepository(
         this[Keys.SPEAKER_VERIFICATION] = s.speakerVerificationEnabled
         this[Keys.DIAGNOSTICS] = s.diagnosticsEnabled
         this[Keys.REVIEW_MODE] = s.reviewModeEnabled
+        this[Keys.THEME_MODE] = s.themeMode
     }
 
     private object Keys {
@@ -82,5 +87,6 @@ class DataStoreSettingsRepository(
         val SPEAKER_VERIFICATION = booleanPreferencesKey("speaker_verification_enabled")
         val DIAGNOSTICS = booleanPreferencesKey("diagnostics_enabled")
         val REVIEW_MODE = booleanPreferencesKey("review_mode_enabled")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
     }
 }

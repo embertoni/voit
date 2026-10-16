@@ -174,3 +174,75 @@ Explicit non-goals for Phase 1, consistent with the privacy/architecture require
   read-only). This is a sandbox-specific test configuration.
 - Verified: `./gradlew :core:data:test` (16 tests), full `./gradlew test` (120 JVM unit
   tests, 0 failures), and `./gradlew assembleDebug` (APK built) all pass.
+
+### FEAT-004 (design system + Phase-1 UI, DI, navigation, end-to-end simulator)
+
+- **Monochrome design system (`core:design`).** The palette is strictly black / white /
+  neutral grey (`Color.kt`); there are NO accent hues. Material3's `error`/`onError` slots
+  are deliberately mapped to black/white too, so even error surfaces stay monochrome. State
+  is therefore NEVER encoded by colour alone: the UI uses explicit text labels, iconography,
+  checkboxes and shape instead (e.g. notes show a "⚠ NEEDS REVIEW" overline, tasks show a
+  checkbox plus a "Done"/"Open" label, disabled settings append "(disabled)"). Added
+  `Spacing.kt` (a generous, coarse `VoitSpacing` scale exposed via a CompositionLocal),
+  `Type.kt` (system `FontFamily.SansSerif`, a few `sp`-sized styles so font scaling / a11y
+  is respected), `Shape.kt` (restrained, mostly-flat rounded corners), a `ThemeMode` enum
+  (SYSTEM/LIGHT/DARK) giving the required in-app override hook on top of the system theme,
+  and reusable components (`VoitScaffold`, `VoitTopBar`, `VoitButton`, `VoitIconButton`,
+  `VoitTextField`, `VoitListItem`, `VoitSectionHeader`) plus the `VoitSoundRing` brand
+  symbol (a monochrome ring + waveform drawn with Canvas strokes). Interactive elements set
+  content descriptions and keep >= 48dp touch targets for TalkBack / accessibility.
+- **`material-icons-core`** (not `-extended`) is used for the handful of needed glyphs
+  (Add, Share, Delete, Edit, Build, CheckCircle, Settings, AutoMirrored List/ArrowBack);
+  all were confirmed present in the core artifact, avoiding the large extended icon pack.
+  `core:design` re-exports Compose foundation/material3/ui + `lifecycle-runtime-compose`
+  (`collectAsStateWithLifecycle`) as `api` so feature modules inherit them.
+- **MVVM / unidirectional state.** Each feature has a ViewModel exposing an immutable
+  `*UiState` via `StateFlow`, depending only on the domain repository abstractions (never
+  Room). Every ViewModel accepts an optional injected `CoroutineScope` so the JVM unit
+  tests drive them with a `TestScope` + `StandardTestDispatcher` and never touch
+  `viewModelScope`/the Android main looper — no Robolectric needed for the ViewModel tests.
+- **`TranscriptProcessor` (in `core:actions`).** The transcript -> structured-result
+  orchestration (the Phase-1 keystone) is a pure, deterministic class wiring the REAL
+  `FormattingParser` + `IntentParser` + `ActionRegistry`. It always produces a structured
+  `Note` (title from the first heading, blocks, tags, reviewRequired) and, when a
+  `create_task` intent matches, a `TaskItem` linked to the note. The registry remains the
+  SOLE authorizer: `export_note` is HIGH risk / confirmation-mandatory, so the processor
+  returns a `PendingConfirmation` and NEVER auto-runs it; `confirm()` re-authorizes with
+  `confirmed = true`. `core:actions` now depends on `core:interpretation` (both pure JVM
+  modules) to host this. This keeps the end-to-end path fully unit-testable off-device.
+- **Simulator as the home screen.** The Simulator (text-command stand-in for the mic) is
+  the Navigation-Compose start destination because it is what makes the Phase-1 exit
+  criteria demonstrable without a device. Routes: Simulator (home), Notes, Note editor
+  (`note_editor/{noteId}`), Tasks, Commands, Command editor, Settings. The command editor
+  shares the Commands ViewModel scoped to the Commands back-stack entry so the draft
+  prepared by the list screen is visible to the editor.
+- **Manual DI container (not Hilt).** `VoitContainer` constructs the Room DB (with
+  `ALL_MIGRATIONS`), the preferences DataStore, the four repositories, the action registry
+  and the transcript processor. `VoitViewModelFactory` builds every ViewModel from it;
+  the note editor has a dedicated `noteEditor(noteId)` factory builder for its per-note id.
+  A manual container was chosen over Hilt to avoid an extra KSP/plugin and keep the whole
+  object graph explicit in one file. `VoitApplication` holds the single process-lifetime
+  container; `MainActivity` applies `VoitTheme` with the persisted `themeMode` override and
+  hosts the nav graph. The app module gains `room-runtime`/`room-ktx` on its classpath
+  because `core:data` keeps Room as `implementation` (not exposed transitively).
+- **`AppSettings.themeMode`.** Added a plain `String` theme-override field ("SYSTEM" /
+  "LIGHT" / "DARK") to the domain settings (kept a string so the pure domain never depends
+  on the Compose `ThemeMode` enum), persisted in DataStore and included in the backup
+  round-trip. Settings screen also surfaces recognition language (pt-BR / en-US), a wake
+  phrase placeholder, review mode, privacy toggles (cloud processing shown but DISABLED,
+  speaker verification disabled placeholder, diagnostics), a clearly-labelled
+  "Listening (not yet active)" section, and delete-my-data entry points for notes / tasks /
+  commands (voice-profile metadata deletion is noted as arriving with the voice phase).
+- **Compose UI tests need instrumentation (no device here), so screens are validated by
+  inspection** and by their backing ViewModel JVM unit tests. The end-to-end path is proven
+  by `TranscriptProcessorTest` (pure) and `SimulatorViewModelTest` (feeds a transcript,
+  asserts a structured note + task are persisted to the fakes, and that the high-risk
+  export is gated behind an explicit confirmation). `CommandsViewModelTest` asserts the
+  editor only offers the registry allow-list, bounds the action list at 5, and never
+  exposes a free-text/code path.
+- **Mic / overlay / foreground-service remain intentionally non-functional placeholders in
+  Phase 1.** No audio is captured; the Simulator is the manual stand-in. This is unchanged
+  from the earlier phases and is reflected in the Settings copy.
+- Verified: full `./gradlew test` (161 JVM unit tests, 0 failures) and
+  `./gradlew assembleDebug` (BUILD SUCCESSFUL, `app/build/outputs/apk/debug/app-debug.apk`
+  produced). Design system reviewed: no accent colours, no colour-only state encoding.
