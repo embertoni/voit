@@ -646,3 +646,56 @@ nothing wrote the `action_runs` audit record. This follow-up closes both.
   `ActionRunRecorderTest` + 6 new `RealHandlersTest` alongside the existing suite),
   `./gradlew :core:data:test`, the full `./gradlew test`, and `./gradlew :app:assembleDebug`
   all pass. No sandbox path re-introduced.
+
+### Phase 5 completion (editor per-action arguments, enable toggle, run-from-UI)
+
+This closes the last Phase-5 TODO: the command editor now captures PER-ACTION arguments
+and an enable/disable flag, and a stored command can be RUN from the UI, dispatched through
+the engine wired earlier and audited.
+
+**What was BUILT:**
+
+- **Per-action arguments in the editor (`feature:commands`).** `CommandDraft.actions` is now
+  `List<DraftAction>` where each `DraftAction(type, rawArgs: Map<String, String>)` holds the
+  user's raw string input per parameter. The editor renders one text field per declared
+  schema parameter (name + required/optional label), sourced from
+  `registry.handlerFor(type)?.schema`, so it never offers a field the action does not
+  declare and still has NO free-text action path. At save, `CommandsViewModel.buildArgs`
+  parses each raw string into the typed `ParamValue` for its `ParamType` (TEXT/NUMBER/BOOL/
+  DURATION/TIMESTAMP/TAGS); a blank optional arg is omitted, and a blank-required or
+  unparseable arg ABORTS the save with a precise error rather than persisting a command that
+  would only be `Rejected` at dispatch. `editExisting` round-trips typed args back to raw
+  strings so an existing command edits cleanly.
+- **Enable/disable toggle.** `CommandDraft.enabled` + a `Switch` in the editor; the saved
+  `CommandDefinition.enabled` is now user-controlled (was hard-coded true). A disabled
+  command shows the existing "DISABLED" overline and offers no Run action (the dispatcher
+  also filters disabled commands, so this is defense in depth).
+- **Run a command from the list.** An enabled command's row has a Run (PlayArrow) action.
+  `CommandsViewModel.runCommand` dispatches the command's first trigger phrase through the
+  injected `CommandDispatcher` and records the result via the injected `ActionRunRecorder`,
+  surfacing a short `runMessage` (status only, never content). The dispatcher/recorder are
+  OPTIONAL constructor params (null in the editor-only tests), and `VoitViewModelFactory`
+  now passes the container's real `commandDispatcher` + `actionRunRecorder` — closing the
+  "wired in DI but never invoked from a screen" gap noted in the previous entry.
+
+**Design choices:**
+
+- **Raw-string draft, typed at the boundary.** The editor holds raw strings so a
+  partially-typed number/timestamp does not crash the UI; conversion to the strict
+  `ParamValue` happens once, at save, keeping the registry's "free text is never executed
+  untyped" invariant intact.
+- **Run matches the command against ITSELF.** `runCommand` dispatches `listOf(command)`
+  with the command's own trigger as the transcript, so a tapped run is deterministic and
+  cannot be hijacked by another command's phrase; the normal multi-command matching still
+  applies on the real transcript path.
+
+**What remains for later phases (unchanged):** non-persistence handlers (timers, overlay,
+listening, open-app, speak, export) stay echo placeholders pending platform runtime; the
+real on-device voice models await the Phase-0 benchmark. Privacy invariant re-affirmed: the
+only new persistence is the redacted `action_runs` record; argument values live only on the
+command the user authored, never in diagnostics.
+
+- Verified on a real dev machine (JDK 17): `./gradlew :feature:commands:test` (9 tests: the
+  4 originals + 5 new covering arg capture/parse/persist, required-arg abort, enable toggle,
+  edit round-trip, and run-with-audit), the full `./gradlew test`, and
+  `./gradlew :app:assembleDebug` all pass. No sandbox path re-introduced.

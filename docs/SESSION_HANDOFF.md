@@ -177,16 +177,16 @@ DB table; diagnostics are stable codes only; no cloud/network in the core path.
      audit trail (`ActionRun` / `ActionRunRepository` / `RoomActionRunRepository` /
      `ActionRunRecorder`) maps a `WorkflowOutcome`/`CommandDispatchResult` to a code-only
      `action_runs` record (codes + ids, never content).
-   - ⬜ **STILL TODO:** **Per-action argument capture in the command editor.** The editor
-     still models actions as `List<ActionType>`, so saved `ActionRequest`s have empty args
-     and `argumentSchema` stays default-empty; a command needing an arg (e.g.
-     `APPEND_TO_NOTE`) validates to `Rejected` at dispatch rather than running. Add arg
-     inputs keyed off each handler's `ParamSpec` schema, plus an enable/disable toggle
-     (`enabled` is hard-coded true). Also: have a ViewModel actually CALL
-     `commandDispatcher.dispatch` + `actionRunRecorder.record` from a user action (the
-     dispatcher/recorder are wired in DI but not yet invoked from any screen).
+   - ✅ **DONE (Phase-5 completion):** The command editor now captures PER-ACTION arguments
+     (a text field per declared `ParamSpec`, parsed to the typed `ParamValue` at save) and an
+     enable/disable toggle; a stored command can be RUN from the list, which invokes
+     `commandDispatcher.dispatch` + `actionRunRecorder.record` (wired via
+     `VoitViewModelFactory`). The "wired in DI but never invoked from a screen" gap is closed.
    - Non-persistence handlers (timers, overlay, listening, open-app, speak, export) remain
      echo placeholders — they need platform runtime from later phases.
+   - **Phase 5 is now functionally complete** off-device: author a command from the
+     allow-list (with typed args) → it persists → Run dispatches it through the bounded
+     engine → real note/task effects land → a redacted `action_runs` record is written.
 3. **Phase 6** (optional local LLM + polish) and **Phase 7** (release hardening) remain,
    per the plan. The real on-device model selection still awaits the **Phase-0 benchmark**
    on a physical Android phone.

@@ -47,6 +47,8 @@ class VoitViewModelFactory(private val container: VoitContainer) : ViewModelProv
             CommandsViewModel(
                 repository = container.commandRepository,
                 registry = container.actionRegistry,
+                dispatcher = container.commandDispatcher,
+                recorder = container.actionRunRecorder,
             ) as T
 
         modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
